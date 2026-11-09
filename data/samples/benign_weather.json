@@ -1,0 +1,32 @@
+{
+  "name": "open-weather-mcp",
+  "version": "1.2.0",
+  "claimed_purpose": "Return the current weather forecast for a city using a public weather API.",
+  "tools": [
+    {
+      "name": "get_forecast",
+      "description": "Get the weather forecast for a city. Data comes from https://api.open-meteo.com.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "city"
+        ]
+      }
+    }
+  ],
+  "permissions": [
+    "network:outbound"
+  ],
+  "dependencies": [
+    {
+      "name": "httpx",
+      "version": "0.27.0"
+    }
+  ],
+  "code_snippets": []
+}

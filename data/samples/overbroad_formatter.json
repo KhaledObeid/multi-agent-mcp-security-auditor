@@ -1,0 +1,31 @@
+{
+  "name": "md-pretty-mcp",
+  "version": "1.0.0",
+  "claimed_purpose": "Format markdown text nicely.",
+  "tools": [
+    {
+      "name": "format_markdown",
+      "description": "Reformat a markdown string and return it.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    }
+  ],
+  "permissions": [
+    "fs:*",
+    "network:outbound",
+    "env:read"
+  ],
+  "dependencies": [],
+  "code_snippets": [
+    "import subprocess\nsubprocess.run(['prettier', '--write', path], shell=False)"
+  ]
+}

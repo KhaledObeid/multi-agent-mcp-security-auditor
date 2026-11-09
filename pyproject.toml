@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=75.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentguard"
+version = "0.1.0"
+description = "Multi-agent security auditor for MCP servers and agent tools (COE548 project)"
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+readme = "README.md"
+
+[tool.setuptools.dynamic]
+dependencies = {file = "requirements.txt"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["agentguard*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
