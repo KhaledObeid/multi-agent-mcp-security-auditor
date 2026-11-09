@@ -1,11 +1,14 @@
-langgraph>=1.0
-langchain-core>=1.0
-langchain-google-genai>=3.0
-langchain-chroma>=1.0
-langchain-text-splitters>=1.0
-chromadb>=1.0
-pydantic>=2.7
-python-dotenv>=1.0
-requests>=2.31
-pypdf>=4.0
-pytest>=8.0
+# Runtime and test dependencies. Target: Python 3.14 (see pyproject.toml).
+# Floors are the latest releases as of Nov 2026. Caps stop the next major
+# version from landing on the team mid-project with breaking changes.
+langgraph>=1.2.20,<2
+langchain-core>=1.7.6,<2
+langchain-google-genai>=4.4.3,<5
+langchain-chroma>=1.1.0,<2
+langchain-text-splitters>=1.1.3,<2
+chromadb>=1.5.9,<2
+pydantic>=2.14.3,<3
+python-dotenv>=1.2.4,<2
+requests>=2.34.2,<3
+pypdf>=7.0.0,<8
+pytest>=9.2.0,<10

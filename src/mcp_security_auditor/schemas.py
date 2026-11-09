@@ -1,4 +1,4 @@
-"""Shared data contracts for AgentGuard.
+"""Shared data contracts for the Multi-Agent MCP Security Auditor.
 
 OWNER: Member A (integration). FROZEN AFTER WEEK 1.
 Every other module imports from here, so changing a field name breaks other

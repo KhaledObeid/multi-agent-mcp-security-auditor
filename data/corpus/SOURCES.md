@@ -1,6 +1,6 @@
 # RAG corpus sources (Member C)
 
-Put downloaded files (PDF, .md or .txt) directly in this folder, then run `python -m agentguard.rag.ingest`.
+Put downloaded files (PDF, .md or .txt) directly in this folder, then run `python -m mcp_security_auditor.rag.ingest`.
 `seed_notes.md` is a short team-written starter so retrieval works on day one; replace or extend it with the primary sources below and cite every one in the report's attribution section.
 
 | Source | Where to get it | Use it for |

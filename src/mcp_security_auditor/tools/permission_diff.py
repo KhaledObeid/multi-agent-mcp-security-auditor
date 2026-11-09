@@ -15,8 +15,8 @@ Starter version: keyword justification table. TODO (Member B):
 """
 from __future__ import annotations
 
-from agentguard.schemas import PermissionDiff, ToolPackage
-from agentguard.tools.manifest_scanner import strip_invisible
+from mcp_security_auditor.schemas import PermissionDiff, ToolPackage
+from mcp_security_auditor.tools.manifest_scanner import strip_invisible
 
 # permission family -> words in the claim that would justify it
 JUSTIFIERS: dict[str, list[str]] = {

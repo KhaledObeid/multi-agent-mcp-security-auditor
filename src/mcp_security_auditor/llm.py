@@ -7,17 +7,20 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from agentguard.config import settings
+from mcp_security_auditor.config import settings
 
 
 @lru_cache(maxsize=1)
 def get_llm():
     from langchain_google_genai import ChatGoogleGenerativeAI
 
+    # Only pass temperature when it is set explicitly (see config.py). If it is
+    # omitted, the model's own default applies, as Google recommends for Gemini 3+.
+    extra = {} if settings.temperature is None else {"temperature": settings.temperature}
     return ChatGoogleGenerativeAI(
         model=settings.llm_model,
-        temperature=settings.temperature,
         max_retries=3,  # free tier rate limits: retry instead of crashing
+        **extra,
     )
 
 

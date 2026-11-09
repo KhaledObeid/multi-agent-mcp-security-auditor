@@ -14,13 +14,13 @@ from __future__ import annotations
 
 from langchain_core.tools import tool
 
-from agentguard.schemas import RedTeamResult, Severity, ToolPackage
-from agentguard.state import AuditState
-from agentguard.tools.sandbox import run_sandbox
-from agentguard.utils.agent_loop import agent_turn
-from agentguard.utils.messages import last_ai, msg_text
-from agentguard.utils.text import UNTRUSTED_RULE
-from agentguard.utils.tool_exec import bump_round, run_tool_calls
+from mcp_security_auditor.schemas import RedTeamResult, Severity, ToolPackage
+from mcp_security_auditor.state import AuditState
+from mcp_security_auditor.tools.sandbox import run_sandbox
+from mcp_security_auditor.utils.agent_loop import agent_turn
+from mcp_security_auditor.utils.messages import last_ai, msg_text
+from mcp_security_auditor.utils.text import UNTRUSTED_RULE
+from mcp_security_auditor.utils.tool_exec import bump_round, run_tool_calls
 
 AGENT = "red_team"
 

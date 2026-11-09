@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import unicodedata
 
-from agentguard.schemas import ToolPackage
+from mcp_security_auditor.schemas import ToolPackage
 
 
 def reveal_invisible(text: str) -> str:

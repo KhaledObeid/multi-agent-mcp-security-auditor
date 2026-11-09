@@ -1,11 +1,11 @@
-# AgentGuard team plan (3 members, about 4 h/week each, due Dec 5, 2026 23:59)
+# Multi-Agent MCP Security Auditor team plan (3 members, about 4 h/week each, due Dec 5, 2026 23:59)
 
 Total budget is roughly 4 weeks x 4 h x 3 people = 48 person-hours, so the plan keeps scope tight and front-loads the risky parts (online LLM behaviour, RAG, OSV) into weeks 1 and 2.
 
 ## Why this splits cleanly
 
 1. `schemas.py` and `state.py` are the contract. They are already written. Freeze them at the end of week 1; after that only additive, Optional fields, via a PR titled `contract: ...`.
-2. Every agent already runs end to end in OFFLINE mode (`AGENTGUARD_OFFLINE=1`) with scripted turns, so nobody waits for anybody. You replace stubs and prompts inside your own files only.
+2. Every agent already runs end to end in OFFLINE mode (`MCP_SECURITY_AUDITOR_OFFLINE=1`) with scripted turns, so nobody waits for anybody. You replace stubs and prompts inside your own files only.
 3. Each person owns whole files. Two people should almost never edit the same file in the same week.
 4. `tests/test_graph_offline.py` must stay green on `main`. If it passes, integration is not broken.
 
@@ -37,7 +37,7 @@ Branches are `a/<topic>`, `b/<topic>`, `c/<topic>`. Small PRs, one reviewer from
 
 ## Gemini free-tier budget
 
-One online audit costs roughly 8 to 15 LLM calls (agent turns, two SOM calls, sandbox calls). Develop in OFFLINE mode, test one sample online, and run the full online eval only once or twice. If you hit rate limits, set `AGENTGUARD_LLM_MODEL` to a lighter model or add a short sleep between eval samples.
+One online audit costs roughly 8 to 15 LLM calls (agent turns, two SOM calls, sandbox calls). Develop in OFFLINE mode, test one sample online, and run the full online eval only once or twice. If you hit rate limits, set `MCP_SECURITY_AUDITOR_LLM_MODEL` to a lighter model (e.g. `gemini-3.5-flash-lite`, also free) or add a short sleep between eval samples.
 
 ## Demo video script (max 4 minutes)
 

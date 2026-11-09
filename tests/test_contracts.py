@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from agentguard.schemas import AuditFindings, Finding, OwaspCategory, Severity, ToolPackage
+from mcp_security_auditor.schemas import AuditFindings, Finding, OwaspCategory, Severity, ToolPackage
 
 SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
 

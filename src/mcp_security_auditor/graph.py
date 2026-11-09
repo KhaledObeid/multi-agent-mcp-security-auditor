@@ -12,13 +12,13 @@ from __future__ import annotations
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from agentguard.agents.inspector import inspector_node, inspector_tools_node
-from agentguard.agents.intake import intake_node
-from agentguard.agents.red_team import red_team_node, redteam_tools_node
-from agentguard.agents.report import report_node
-from agentguard.agents.threat_analyst import analyst_findings_node, analyst_tools_node, threat_analyst_node
-from agentguard.routing import route_after_findings, route_analyst, route_inspector, route_red_team
-from agentguard.state import AuditState
+from mcp_security_auditor.agents.inspector import inspector_node, inspector_tools_node
+from mcp_security_auditor.agents.intake import intake_node
+from mcp_security_auditor.agents.red_team import red_team_node, redteam_tools_node
+from mcp_security_auditor.agents.report import report_node
+from mcp_security_auditor.agents.threat_analyst import analyst_findings_node, analyst_tools_node, threat_analyst_node
+from mcp_security_auditor.routing import route_after_findings, route_analyst, route_inspector, route_red_team
+from mcp_security_auditor.state import AuditState
 
 
 def build_graph(checkpointer=None):
@@ -50,7 +50,7 @@ def build_graph(checkpointer=None):
 
 def make_checkpointer() -> MemorySaver:
     """MemorySaver that is explicitly allowed to restore our Pydantic/enum types."""
-    allowed = [("agentguard.schemas", name) for name in (
+    allowed = [("mcp_security_auditor.schemas", name) for name in (
         "ToolPackage", "ToolSpec", "Dependency", "ScanFlag", "ScanReport", "PermissionDiff", "DependencyVuln",
         "Finding", "AuditFindings", "RedTeamResult", "FinalReport", "AuditRecord", "Severity", "OwaspCategory", "Verdict")]
     try:

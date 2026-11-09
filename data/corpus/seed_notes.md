@@ -1,4 +1,4 @@
-# AgentGuard seed notes (team-written starter, replace with primary sources)
+# Multi-Agent MCP Security Auditor seed notes (team-written starter, replace with primary sources)
 
 ## ASI01 Agent Goal Hijack
 An attacker redirects an agent's objective through content the agent reads rather than code it runs. In MCP this usually appears as tool poisoning: a tool description contains instructions aimed at the model, often hidden in tags such as <IMPORTANT>, in HTML comments, or after long whitespace. Typical payloads ask the model to read secrets, call another tool first, or hide the behaviour from the user. Mitigations: treat tool descriptions as untrusted input, show full descriptions to users at approval time, strip or flag imperative language aimed at the model, and require confirmation for sensitive actions.

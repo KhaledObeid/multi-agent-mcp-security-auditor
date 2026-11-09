@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from agentguard.config import settings
-from agentguard.llm import get_embeddings
+from mcp_security_auditor.config import settings
+from mcp_security_auditor.llm import get_embeddings
 
 
 @lru_cache(maxsize=1)
@@ -19,7 +19,7 @@ def _store():
     from langchain_chroma import Chroma
 
     if not settings.chroma_dir.exists():
-        raise RuntimeError("Vector store not built. Run: python -m agentguard.rag.ingest")
+        raise RuntimeError("Vector store not built. Run: python -m mcp_security_auditor.rag.ingest")
     return Chroma(
         collection_name=settings.chroma_collection,
         embedding_function=get_embeddings(),

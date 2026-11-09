@@ -6,10 +6,10 @@ import json
 import os
 from pathlib import Path
 
-os.environ["AGENTGUARD_OFFLINE"] = "1"
+os.environ["MCP_SECURITY_AUDITOR_OFFLINE"] = "1"
 
-from agentguard.graph import build_graph  # noqa: E402
-from agentguard.schemas import ToolPackage  # noqa: E402
+from mcp_security_auditor.graph import build_graph  # noqa: E402
+from mcp_security_auditor.schemas import ToolPackage  # noqa: E402
 
 SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
 

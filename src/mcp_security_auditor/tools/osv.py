@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import requests
 
-from agentguard.config import settings
-from agentguard.schemas import DependencyVuln
+from mcp_security_auditor.config import settings
+from mcp_security_auditor.schemas import DependencyVuln
 
 OSV_URL = "https://api.osv.dev/v1/query"
 

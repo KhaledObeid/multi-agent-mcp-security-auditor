@@ -1,4 +1,4 @@
-"""LangGraph state for AgentGuard (Pydantic BaseModel, as the guidelines require).
+"""LangGraph state for the Multi-Agent MCP Security Auditor (Pydantic BaseModel, as the guidelines require).
 
 OWNER: Member A. FROZEN AFTER WEEK 1 (same rule as schemas.py).
 
@@ -20,7 +20,7 @@ from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 
-from agentguard.schemas import (
+from mcp_security_auditor.schemas import (
     AuditFindings,
     AuditRecord,
     DependencyVuln,

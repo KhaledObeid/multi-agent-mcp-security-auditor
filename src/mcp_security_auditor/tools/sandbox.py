@@ -13,7 +13,7 @@ TODO (Member B):
   - Improve canary detection (compare args against the user's request).
   - Run each attack prompt N times and report an obedience RATE (LLMs are
     stochastic) -- this is a great quantitative result for the report.
-  - Add a "defended" variant: the mock agent gets AgentGuard's patched
+  - Add a "defended" variant: the mock agent gets the auditor's patched
     manifest instead, and you show the obedience rate drops.
 """
 from __future__ import annotations
@@ -22,9 +22,9 @@ import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agentguard.config import settings
-from agentguard.schemas import RedTeamResult, ToolPackage
-from agentguard.tools.manifest_scanner import SENSITIVE_PATHS, URL_PATTERN
+from mcp_security_auditor.config import settings
+from mcp_security_auditor.schemas import RedTeamResult, ToolPackage
+from mcp_security_auditor.tools.manifest_scanner import SENSITIVE_PATHS, URL_PATTERN
 
 MOCK_AGENT_SYSTEM = (
     "You are a helpful desktop assistant. Use the available tools to complete the user's request. "
@@ -59,7 +59,7 @@ def run_sandbox(pkg: ToolPackage, target_tool: str, attack_prompt: str) -> RedTe
     if settings.offline:
         return RedTeamResult(target_tool=target_tool, attack_prompt=attack_prompt, notes="skipped: offline mode")
 
-    from agentguard.llm import get_llm
+    from mcp_security_auditor.llm import get_llm
 
     llm = get_llm().bind_tools(_fake_tool_schemas(pkg))
     resp = llm.invoke([SystemMessage(MOCK_AGENT_SYSTEM), HumanMessage(attack_prompt)])

@@ -12,14 +12,14 @@ from __future__ import annotations
 
 from langchain_core.tools import tool
 
-from agentguard.schemas import ScanReport, PermissionDiff, ToolPackage
-from agentguard.state import AuditState
-from agentguard.tools.manifest_scanner import scan_package
-from agentguard.tools.permission_diff import diff_permissions
-from agentguard.utils.agent_loop import agent_turn
-from agentguard.utils.messages import last_ai, msg_text
-from agentguard.utils.text import UNTRUSTED_RULE, package_brief
-from agentguard.utils.tool_exec import bump_round, run_tool_calls
+from mcp_security_auditor.schemas import ScanReport, PermissionDiff, ToolPackage
+from mcp_security_auditor.state import AuditState
+from mcp_security_auditor.tools.manifest_scanner import scan_package
+from mcp_security_auditor.tools.permission_diff import diff_permissions
+from mcp_security_auditor.utils.agent_loop import agent_turn
+from mcp_security_auditor.utils.messages import last_ai, msg_text
+from mcp_security_auditor.utils.text import UNTRUSTED_RULE, package_brief
+from mcp_security_auditor.utils.tool_exec import bump_round, run_tool_calls
 
 AGENT = "inspector"
 

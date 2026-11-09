@@ -1,7 +1,7 @@
 """Build the vector store from data/corpus. OWNER: Member C.
 
 Run once (and again whenever the corpus changes):
-    python -m agentguard.rag.ingest
+    python -m mcp_security_auditor.rag.ingest
 
 Reads .md, .txt and .pdf files, splits them into chunks, embeds them with the
 Gemini embedding model and persists them to Chroma in .chroma/.
@@ -22,8 +22,8 @@ from pathlib import Path
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from agentguard.config import settings
-from agentguard.llm import get_embeddings
+from mcp_security_auditor.config import settings
+from mcp_security_auditor.llm import get_embeddings
 
 OWASP_ID = re.compile(r"\b(ASI\d{2}|LLM\d{2})\b")
 

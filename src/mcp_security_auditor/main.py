@@ -1,10 +1,10 @@
 """Command-line entry point. OWNER: Member A.
 
 Examples
-    python -m agentguard.main audit data/samples/poisoned_math.json
-    python -m agentguard.main audit data/samples/rugpull_calc_v1.json data/samples/rugpull_calc_v2.json --thread demo
-    python -m agentguard.main repl
-    python -m agentguard.main graph
+    python -m mcp_security_auditor.main audit data/samples/poisoned_math.json
+    python -m mcp_security_auditor.main audit data/samples/rugpull_calc_v1.json data/samples/rugpull_calc_v2.json --thread demo
+    python -m mcp_security_auditor.main repl
+    python -m mcp_security_auditor.main graph
 
 Auditing two files with the same --thread in ONE process is the checkpointing
 demo: MemorySaver is in-memory, so continuity lasts for the life of the process.
@@ -17,9 +17,9 @@ from pathlib import Path
 
 from langchain_core.messages import BaseMessage, RemoveMessage
 
-from agentguard.graph import build_graph
-from agentguard.schemas import ToolPackage
-from agentguard.utils.messages import print_message
+from mcp_security_auditor.graph import build_graph
+from mcp_security_auditor.schemas import ToolPackage
+from mcp_security_auditor.utils.messages import print_message
 
 CHANNELS = {"inspector_messages": "Inspector", "analyst_messages": "Analyst", "redteam_messages": "RedTeam"}
 
@@ -82,10 +82,10 @@ def show_history(graph, thread_id: str) -> None:
 
 def repl() -> None:
     graph, thread = build_graph(), "default"
-    print("AgentGuard REPL. Commands: audit <path> | thread <id> | state | history | quit")
+    print("Multi-Agent MCP Security Auditor REPL. Commands: audit <path> | thread <id> | state | history | quit")
     while True:
         try:
-            line = input(f"agentguard[{thread}]> ").strip()
+            line = input(f"mcp-security-auditor[{thread}]> ").strip()
         except (EOFError, KeyboardInterrupt):
             break
         cmd, _, arg = line.partition(" ")
@@ -108,7 +108,7 @@ def repl() -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="agentguard")
+    p = argparse.ArgumentParser(prog="python -m mcp_security_auditor.main")
     sub = p.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("audit")
     a.add_argument("paths", nargs="+")
@@ -119,7 +119,7 @@ def main() -> None:
     args = p.parse_args()
 
     if args.cmd == "graph":
-        from agentguard.graph import draw_mermaid
+        from mcp_security_auditor.graph import draw_mermaid
 
         print(draw_mermaid())
     elif args.cmd == "repl":

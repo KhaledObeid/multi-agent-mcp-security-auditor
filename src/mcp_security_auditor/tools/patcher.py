@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import re
 
-from agentguard.schemas import PermissionDiff, ScanReport, ToolPackage
-from agentguard.tools.manifest_scanner import strip_invisible
+from mcp_security_auditor.schemas import PermissionDiff, ScanReport, ToolPackage
+from mcp_security_auditor.tools.manifest_scanner import strip_invisible
 
 
 def patch_manifest(pkg: ToolPackage, scan: ScanReport | None, diff: PermissionDiff | None) -> tuple[dict, list[str]]:

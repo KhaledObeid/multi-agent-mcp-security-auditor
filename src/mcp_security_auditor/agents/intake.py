@@ -15,8 +15,8 @@ import json
 from langchain_core.messages import RemoveMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
-from agentguard.schemas import Verdict
-from agentguard.state import AuditState
+from mcp_security_auditor.schemas import Verdict
+from mcp_security_auditor.state import AuditState
 
 
 def _h(s: str) -> str:

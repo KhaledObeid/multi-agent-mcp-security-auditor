@@ -8,9 +8,9 @@ Two kinds of routing:
 """
 from __future__ import annotations
 
-from agentguard.schemas import Severity
-from agentguard.state import AuditState
-from agentguard.utils.messages import last_ai
+from mcp_security_auditor.schemas import Severity
+from mcp_security_auditor.state import AuditState
+from mcp_security_auditor.utils.messages import last_ai
 
 
 def _wants_tools(messages) -> bool:

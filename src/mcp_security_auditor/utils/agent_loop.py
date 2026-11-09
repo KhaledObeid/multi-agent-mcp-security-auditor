@@ -11,7 +11,7 @@ from typing import Callable
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
-from agentguard.config import settings
+from mcp_security_auditor.config import settings
 
 
 def agent_turn(
@@ -43,7 +43,7 @@ def agent_turn(
             new.append(AIMessage(content=offline_final))
         return new
 
-    from agentguard.llm import get_llm
+    from mcp_security_auditor.llm import get_llm
 
     ai = get_llm().bind_tools(tools).invoke(convo)
     new.append(ai)

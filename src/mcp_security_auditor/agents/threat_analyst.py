@@ -21,14 +21,14 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 
-from agentguard.config import settings
-from agentguard.schemas import AuditFindings, DependencyVuln, Finding, OwaspCategory, Severity
-from agentguard.state import AuditState
-from agentguard.tools.osv import query_osv_one
-from agentguard.utils.agent_loop import agent_turn
-from agentguard.utils.messages import last_ai, msg_text
-from agentguard.utils.text import UNTRUSTED_RULE
-from agentguard.utils.tool_exec import bump_round, run_tool_calls
+from mcp_security_auditor.config import settings
+from mcp_security_auditor.schemas import AuditFindings, DependencyVuln, Finding, OwaspCategory, Severity
+from mcp_security_auditor.state import AuditState
+from mcp_security_auditor.tools.osv import query_osv_one
+from mcp_security_auditor.utils.agent_loop import agent_turn
+from mcp_security_auditor.utils.messages import last_ai, msg_text
+from mcp_security_auditor.utils.text import UNTRUSTED_RULE
+from mcp_security_auditor.utils.tool_exec import bump_round, run_tool_calls
 
 AGENT = "analyst"
 
@@ -56,7 +56,7 @@ def search_security_kb(query: str, k: int = 4) -> str:
     MCP security guidance, incident write-ups). Returns the top-k passages with their source."""
     if settings.offline:
         return "KB unavailable in offline mode."
-    from agentguard.tools.rag import search_kb
+    from mcp_security_auditor.tools.rag import search_kb
 
     hits = search_kb(query, k=k)
     return "\n\n".join(f"[source: {h['source']} | ids: {h['owasp_ids']}]\n{h['text']}" for h in hits)
@@ -185,14 +185,14 @@ def _dossier(state: AuditState) -> str:
 
 
 def analyst_findings_node(state: AuditState) -> dict:
-    from agentguard.routing import should_red_team
+    from mcp_security_auditor.routing import should_red_team
 
     baseline = rule_based_findings(state)
     errors = list(state.errors)
     if settings.offline:
         findings = baseline
     else:
-        from agentguard.llm import get_llm
+        from mcp_security_auditor.llm import get_llm
 
         try:
             raw = get_llm().with_structured_output(AuditFindings).invoke(

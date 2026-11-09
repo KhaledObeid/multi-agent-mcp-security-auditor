@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from agentguard.schemas import ScanFlag, ScanReport, Severity, ToolPackage
+from mcp_security_auditor.schemas import ScanFlag, ScanReport, Severity, ToolPackage
 
 # --- pattern tables ---------------------------------------------------------
 INJECTION_PATTERNS = [

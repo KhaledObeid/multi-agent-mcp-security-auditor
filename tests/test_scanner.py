@@ -2,9 +2,9 @@
 import json
 from pathlib import Path
 
-from agentguard.schemas import ToolPackage
-from agentguard.tools.manifest_scanner import scan_package
-from agentguard.tools.permission_diff import diff_permissions
+from mcp_security_auditor.schemas import ToolPackage
+from mcp_security_auditor.tools.manifest_scanner import scan_package
+from mcp_security_auditor.tools.permission_diff import diff_permissions
 
 SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
 

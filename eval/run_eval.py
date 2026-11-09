@@ -4,7 +4,7 @@ Runs every sample in data/samples against its expected verdict in labels.json,
 each on a fresh thread, and prints accuracy plus a confusion matrix.
 
     python eval/run_eval.py                      # full LLM system
-    AGENTGUARD_OFFLINE=1 python eval/run_eval.py # rule-based baseline
+    MCP_SECURITY_AUDITOR_OFFLINE=1 python eval/run_eval.py # rule-based baseline
 
 Comparing the two runs is the core of the Results section.
 
@@ -25,9 +25,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from agentguard.config import settings  # noqa: E402
-from agentguard.graph import build_graph  # noqa: E402
-from agentguard.main import load_package  # noqa: E402
+from mcp_security_auditor.config import settings  # noqa: E402
+from mcp_security_auditor.graph import build_graph  # noqa: E402
+from mcp_security_auditor.main import load_package  # noqa: E402
 
 SAMPLES = ROOT / "data" / "samples"
 

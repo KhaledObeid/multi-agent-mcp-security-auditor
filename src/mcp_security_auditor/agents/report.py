@@ -17,10 +17,10 @@ import json
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agentguard.config import settings
-from agentguard.schemas import AuditRecord, FinalReport, Severity, Verdict
-from agentguard.state import AuditState
-from agentguard.tools.patcher import patch_manifest
+from mcp_security_auditor.config import settings
+from mcp_security_auditor.schemas import AuditRecord, FinalReport, Severity, Verdict
+from mcp_security_auditor.state import AuditState
+from mcp_security_auditor.tools.patcher import patch_manifest
 
 REPORT_SYSTEM = """You are the Report agent of a security audit team. Using the findings and red-team results,
 decide whether the user should install the package, install it with mitigations, or block it.
@@ -59,7 +59,7 @@ def report_node(state: AuditState) -> dict:
                                                if f.severity.rank >= Severity.MEDIUM.rank])
 
     if not settings.offline:
-        from agentguard.llm import get_llm
+        from mcp_security_auditor.llm import get_llm
 
         try:
             raw = get_llm().with_structured_output(FinalReport).invoke(
