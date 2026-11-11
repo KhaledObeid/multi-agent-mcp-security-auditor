@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import time
 from pathlib import Path
 
 from langchain_core.documents import Document
@@ -26,6 +27,9 @@ from mcp_security_auditor.config import settings
 from mcp_security_auditor.llm import get_embeddings
 
 OWASP_ID = re.compile(r"\b(ASI\d{2}|LLM\d{2})\b")
+
+EMBED_BATCH = 90     # Gemini free tier allows 100 embedding requests per minute (1 per chunk)
+EMBED_PAUSE_S = 62   # so send at most 90, then wait until a full minute has passed
 
 
 def load_corpus(corpus_dir: Path) -> list[Document]:
@@ -61,12 +65,18 @@ def build(reset: bool = True) -> int:
     chunks = split(load_corpus(settings.corpus_dir))
     if not chunks:
         raise SystemExit(f"No documents found in {settings.corpus_dir}")
-    Chroma.from_documents(
-        chunks,
-        embedding=get_embeddings(),
+    store = Chroma(
         collection_name=settings.chroma_collection,
+        embedding_function=get_embeddings(),
         persist_directory=str(settings.chroma_dir),
     )
+    for start in range(0, len(chunks), EMBED_BATCH):
+        t0 = time.monotonic()
+        store.add_documents(chunks[start:start + EMBED_BATCH])
+        done = min(start + EMBED_BATCH, len(chunks))
+        print(f"  embedded {done}/{len(chunks)} chunks")
+        if done < len(chunks):  # wait out the rest of the minute before the next group
+            time.sleep(max(0.0, EMBED_PAUSE_S - (time.monotonic() - t0)))
     return len(chunks)
 
 
