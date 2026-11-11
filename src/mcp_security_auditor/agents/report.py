@@ -6,8 +6,10 @@ Toolset: none bound to the LLM (patching is deterministic, see tools/patcher.py)
 so its toolset differs from every other agent.
 Structured Output Mode: FinalReport.
 
-Responsible-AI guardrail: a deterministic policy computes the MINIMUM verdict.
-The LLM may make the verdict stricter, never more lenient.
+Responsible-AI guardrail: a deterministic policy computes the MINIMUM verdict
+(policy_floor) from the findings AND the scanner's own severities, so the LLM
+can neither lower it directly nor by under-rating a finding. The LLM may make
+the verdict stricter, never more lenient.
 
 TODO (Member A): tune policy_verdict(); improve REPORT_SYSTEM.
 """
@@ -28,13 +30,24 @@ Write a rationale a non-expert can follow (3-6 sentences) and list concrete requ
 The minimum verdict allowed by policy is given; you may choose it or a stricter one, never a more lenient one."""
 
 
+def _highest(severities) -> Severity:
+    return max(severities, key=lambda s: s.rank, default=Severity.INFO)
+
+
 def policy_verdict(state: AuditState) -> tuple[Verdict, str]:
-    sev = state.findings.max_severity if state.findings else Severity.INFO
+    # The floor must not depend on the LLM alone: if the analyst LLM rates a
+    # critical scanner flag as "high", the floor would drop and the LLM could make
+    # the verdict MORE lenient. So take the highest of the findings and of the
+    # deterministic scanner's own severity hints.
+    llm_sev = state.findings.max_severity if state.findings else Severity.INFO
+    scan_sev = _highest(f.severity_hint for f in state.scan_report.flags) if state.scan_report else Severity.INFO
+    sev = _highest([llm_sev, scan_sev])
     obeyed = any(r.mock_agent_obeyed for r in state.red_team_results)
     if obeyed:
         return Verdict.BLOCK, "the mock agent obeyed injected instructions in the sandbox"
     if sev == Severity.CRITICAL:
-        return Verdict.BLOCK, "at least one critical finding"
+        source = "the scanner flagged" if scan_sev == Severity.CRITICAL and llm_sev != Severity.CRITICAL else "there is"
+        return Verdict.BLOCK, f"{source} at least one critical finding"
     if state.rug_pull_detected:
         return Verdict.BLOCK, "tool definitions changed after a previous approval"
     if sev.rank >= Severity.MEDIUM.rank:
@@ -73,7 +86,9 @@ def report_node(state: AuditState) -> dict:
             errors.append(f"report SOM failed, using policy report: {type(e).__name__}: {e}")
 
     patched, changes = patch_manifest(state.package, state.scan_report, state.permission_diff)
-    record = AuditRecord(package_name=state.package.name, package_version=state.package.version,
-                         manifest_hash=state.manifest_hash or "", tool_hashes=state.tool_hashes, verdict=report.verdict)
-    return {"final_report": report, "patched_manifest": patched, "patch_changes": changes,
-            "audit_history": [record], "errors": errors}
+    pkg = state.package
+    record = AuditRecord(package_name=pkg.name, package_version=pkg.version,
+                         manifest_hash=state.manifest_hash or "", tool_hashes=state.tool_hashes, verdict=report.verdict,
+                         permissions=list(pkg.permissions), dependencies=[d.name for d in pkg.dependencies])
+    return {"final_report": report, "policy_floor": floor, "policy_reason": reason, "patched_manifest": patched,
+            "patch_changes": changes, "audit_history": [record], "errors": errors}

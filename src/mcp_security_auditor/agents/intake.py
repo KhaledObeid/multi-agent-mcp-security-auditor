@@ -3,7 +3,8 @@
 1. Hashes the package and each tool description.
 2. Compares with the last NON-BLOCKED audit of the same package name stored in
    audit_history (this only works because MemorySaver keeps state per thread_id),
-   and flags a rug pull if any previously approved tool changed.
+   and flags a rug pull if any previously approved tool changed, or if the new
+   version adds a tool, a permission or a dependency.
 3. Resets the per-run fields so a second audit on the same thread starts clean
    while audit_history survives (conversation management).
 """
@@ -37,6 +38,15 @@ def intake_node(state: AuditState) -> dict:
                 changes.append(f"tool '{name}' changed since approved v{last.package_version}")
             elif name not in last.tool_hashes:
                 changes.append(f"new tool '{name}' added since v{last.package_version}")
+        # a rug pull can also keep the descriptions and widen what the package may do.
+        # Only ADDITIONS count: dropping a permission is safe, and a version bump of an
+        # existing dependency is a normal update (OSV checks its CVEs separately).
+        for perm in pkg.permissions:
+            if perm not in last.permissions:
+                changes.append(f"new permission '{perm}' requested since v{last.package_version}")
+        for dep in pkg.dependencies:
+            if dep.name not in last.dependencies:
+                changes.append(f"new dependency '{dep.name}=={dep.version}' added since v{last.package_version}")
 
     clear = [RemoveMessage(id=REMOVE_ALL_MESSAGES)]
     return {
@@ -57,6 +67,8 @@ def intake_node(state: AuditState) -> dict:
         "needs_red_team": False,
         "red_team_results": [],
         "final_report": None,
+        "policy_floor": None,
+        "policy_reason": "",
         "patched_manifest": None,
         "patch_changes": [],
         "tool_rounds": {},

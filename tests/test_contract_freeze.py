@@ -26,11 +26,13 @@ FROZEN_FIELDS = {
     "RedTeamResult": ["target_tool", "attack_prompt", "mock_agent_obeyed", "observed_tool_calls", "canary_hits",
                       "notes"],
     "FinalReport": ["verdict", "rationale", "required_mitigations"],
-    "AuditRecord": ["package_name", "package_version", "manifest_hash", "tool_hashes", "verdict"],
+    "AuditRecord": ["package_name", "package_version", "manifest_hash", "tool_hashes", "verdict", "permissions",
+                    "dependencies"],
     "AuditState": ["package", "run_count", "manifest_hash", "tool_hashes", "audit_history", "rug_pull_detected",
                    "rug_pull_changes", "inspector_messages", "analyst_messages", "redteam_messages", "scan_report",
                    "permission_diff", "dependency_vulns", "retrieved_sources", "findings", "needs_red_team",
-                   "red_team_results", "final_report", "patched_manifest", "patch_changes", "tool_rounds", "errors"],
+                   "red_team_results", "final_report", "policy_floor", "policy_reason", "patched_manifest",
+                   "patch_changes", "tool_rounds", "errors"],
 }
 
 FROZEN_ENUMS = {

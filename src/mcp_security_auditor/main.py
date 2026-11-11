@@ -60,6 +60,8 @@ def run_audit(graph, pkg: ToolPackage, thread_id: str, show_messages: bool = Tru
     print("\n================ VERDICT ================")
     if rep:
         print(f"verdict:   {rep.verdict.value}")
+        if values.get("policy_floor"):
+            print(f"policy minimum: {values['policy_floor'].value} ({values.get('policy_reason')})")
         print(f"rationale: {rep.rationale}")
         for m in rep.required_mitigations:
             print(f"  - {m}")

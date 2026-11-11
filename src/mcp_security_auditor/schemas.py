@@ -191,3 +191,7 @@ class AuditRecord(BaseModel):
     manifest_hash: str
     tool_hashes: dict[str, str]
     verdict: Optional[Verdict] = None
+    # added at the freeze: lets intake detect a rug pull that keeps every tool
+    # description identical but asks for new permissions or pulls in a new dependency
+    permissions: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)  # dependency names

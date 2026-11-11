@@ -32,12 +32,17 @@ def route_red_team(state: AuditState) -> str:
 
 def should_red_team(state: AuditState) -> bool:
     """The key conditional edge. Red-team when there is evidence of injection,
-    a high/critical finding, or a rug pull. Explain this rule in the report."""
+    a rug pull, or a high/critical finding on a SPECIFIC TOOL. Explain this rule in the report.
+
+    The sandbox attacks tool descriptions, so a high finding with no affected tool
+    (e.g. a dependency with known CVEs) gives it nothing to test: skipping it saves
+    several LLM calls per audit on a free tier of about 20 calls a day."""
     if state.rug_pull_detected:
         return True
     if state.scan_report and state.scan_report.has_injection_indicators:
         return True
-    return bool(state.findings and state.findings.max_severity.rank >= Severity.HIGH.rank)
+    findings = state.findings.findings if state.findings else []
+    return any(f.affected_tool and f.severity.rank >= Severity.HIGH.rank for f in findings)
 
 
 def route_after_findings(state: AuditState) -> str:
