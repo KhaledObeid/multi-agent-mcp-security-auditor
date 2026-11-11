@@ -1,6 +1,7 @@
 """Shared data contracts for the Multi-Agent MCP Security Auditor.
 
-OWNER: Member A (integration). FROZEN AFTER WEEK 1.
+OWNER: Member A (integration). FROZEN AFTER WEEK 1 (Nov 11, 2026), enforced by
+tests/test_contract_freeze.py.
 Every other module imports from here, so changing a field name breaks other
 people's code. If you need a change, open a PR titled "contract:" and tell the
 team before merging. Adding a new Optional field is always safe; renaming or
@@ -33,9 +34,9 @@ class OwaspCategory(str, Enum):
     """OWASP Top 10 for Agentic Applications (2026 edition, published Dec 2025)
     plus the LLM Top 10 entries most relevant to tool packages.
 
-    TODO (Member C): double-check names against the exact corpus version you
-    ingest. The LLM Top 10 has a 2026 edition that renumbered some entries;
-    the IDs below follow the 2025 edition. Pick one edition and state it in the report.
+    Verified by Member C on Nov 10, 2026 against the ingested PDFs: ASI01-ASI10
+    match the Agentic 2026 document, and the LLM ids follow the LLM Top 10
+    **2025** edition (the 2026 edition renumbers entries). State this in the report.
     """
     ASI01 = "ASI01 Agent Goal Hijack"
     ASI02 = "ASI02 Tool Misuse and Exploitation"

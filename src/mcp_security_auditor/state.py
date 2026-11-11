@@ -1,6 +1,7 @@
 """LangGraph state for the Multi-Agent MCP Security Auditor (Pydantic BaseModel, as the guidelines require).
 
-OWNER: Member A. FROZEN AFTER WEEK 1 (same rule as schemas.py).
+OWNER: Member A. FROZEN AFTER WEEK 1 (Nov 11, 2026; same rule as schemas.py),
+enforced by tests/test_contract_freeze.py.
 
 Design notes for the report (State Design section):
 - Each agent has its OWN message channel (inspector_messages, analyst_messages,
