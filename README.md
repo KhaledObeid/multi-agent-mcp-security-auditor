@@ -78,6 +78,19 @@ On Windows PowerShell set the flag with `$env:MCP_SECURITY_AUDITOR_OFFLINE=1` be
 | Structured Output Mode | `AuditFindings` (analyst) and `FinalReport` (report), with validation and fallback |
 | Message types and tool calls | `utils/messages.print_message`, printed live during every run |
 | Safeguards | untrusted-content delimiting, invisible-character reveal, tool-round limits, policy floor on verdicts, sandbox never executes tools |
+| Error handling | a failed LLM call falls back to the rule-based step for that agent (`utils/agent_loop.py`), so an audit always finishes; failures are shown in the trace and in `errors` |
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `503 UNAVAILABLE ... high demand` or `504 DEADLINE_EXCEEDED` | Google's model is overloaded (temporary, not your quota) | Wait and retry, or use the lighter free model: `MCP_SECURITY_AUDITOR_LLM_MODEL=gemini-3.5-flash-lite` |
+| `429 RESOURCE_EXHAUSTED` | Free-tier quota used up (per minute or per day) | Wait for the reset; see your limits at ai.dev/rate-limit. Each teammate should use their own key |
+| Trace shows `[LLM unavailable ...; using rule-based fallback]` | An LLM call failed; the audit continued on rules | Same as the two rows above. The verdict is still valid (it comes from the policy floor) |
+| An online audit is slow when the model is busy | Each failed call retries with growing waits | Lower `MCP_SECURITY_AUDITOR_LLM_MAX_RETRIES` (default 3) and `MCP_SECURITY_AUDITOR_LLM_TIMEOUT_S` (default 30) |
+| `Vector store not built` in the analyst's tool results | `.chroma/` is not in git, so every machine builds its own | `python -m mcp_security_auditor.rag.ingest` (about 4 minutes, 345 embedding requests) |
+| `fontTools is required ...` during ingest | One corpus PDF uses an unusual font | Harmless; the text is still extracted |
+| `pytest` is slow or calls the API | Should not happen: `tests/conftest.py` forces offline mode | Make sure you run `pytest` from the repository root |
 
 ## Repository layout
 
@@ -90,7 +103,7 @@ src/mcp_security_auditor/  schemas.py, state.py, graph.py, routing.py, main.py, 
 data/samples/              test tool packages + labels.json
 data/corpus/               RAG documents (see SOURCES.md)
 eval/                      run_eval.py
-tests/                     pytest suite (offline)
+tests/                     pytest suite (offline; conftest.py forces OFFLINE=1, test_contract_freeze.py guards schemas/state)
 docs/PLAN.md               team ownership and timeline
 ```
 
