@@ -69,7 +69,7 @@ On Windows PowerShell set the flag with `$env:MCP_SECURITY_AUDITOR_OFFLINE=1` be
 |---|---|
 | At least 3 distinct agents | Inspector, Threat Analyst, Red-Team, Report (`src/mcp_security_auditor/agents/`) |
 | Shared state, partial updates | `state.py`; every node returns only the keys it changes |
-| Conditional edge | `routing.should_red_team` decides whether the Red-Team agent runs; tool-loop routers per agent |
+| Conditional edge | `routing.should_red_team` decides whether the Red-Team agent runs (injection signs, a rug pull, or a high finding on a specific tool); tool-loop routers per agent |
 | Vectorized RAG | Chroma + Gemini embeddings, `rag/ingest.py`, `tools/rag.py`, tool `search_security_kb` |
 | Two more tools, one custom | Custom: `scan_manifest`, `check_permissions`, `run_sandbox_test`. External: `query_osv` (OSV.dev) |
 | Different toolsets | Inspector {scan_manifest, check_permissions}; Analyst {search_security_kb, query_osv}; Red-Team {run_sandbox_test}; Report {none, deterministic patcher} |
@@ -77,7 +77,8 @@ On Windows PowerShell set the flag with `$env:MCP_SECURITY_AUDITOR_OFFLINE=1` be
 | MemorySaver | `graph.make_checkpointer`; rug-pull detection across runs on one thread |
 | Structured Output Mode | `AuditFindings` (analyst) and `FinalReport` (report), with validation and fallback |
 | Message types and tool calls | `utils/messages.print_message`, printed live during every run |
-| Safeguards | untrusted-content delimiting, invisible-character reveal, tool-round limits, policy floor on verdicts, sandbox never executes tools |
+| Safeguards | untrusted-content delimiting, invisible-character reveal, tool-round limits, policy floor on verdicts (computed from the findings AND the deterministic scanner, so the LLM cannot lower it by under-rating a finding; shown as `policy minimum`), sandbox never executes tools |
+| Checkpointing / rug pull | `intake.py` compares each audit with the last approved one on the same thread: changed or new tools, new permissions and new dependencies all count as a rug pull |
 | Error handling | a failed LLM call falls back to the rule-based step for that agent (`utils/agent_loop.py`), so an audit always finishes; failures are shown in the trace and in `errors` |
 
 ## Troubleshooting
@@ -86,6 +87,7 @@ On Windows PowerShell set the flag with `$env:MCP_SECURITY_AUDITOR_OFFLINE=1` be
 |---|---|---|
 | `503 UNAVAILABLE ... high demand` or `504 DEADLINE_EXCEEDED` | Google's model is overloaded (temporary, not your quota) | Wait and retry, or use the lighter free model: `MCP_SECURITY_AUDITOR_LLM_MODEL=gemini-3.5-flash-lite` |
 | `429 RESOURCE_EXHAUSTED` | Free-tier quota used up (per minute or per day) | Wait for the reset; see your limits at ai.dev/rate-limit. Each teammate should use their own key |
+| `429` mentioning `limit: 20` and `requests per day` | `gemini-3.8-flash` allows only about 20 requests per day on the free tier (1 to 2 audits). Each model has its own daily limit | Use `gemini-3.5-flash-lite` for development and evaluation |
 | Trace shows `[LLM unavailable ...; using rule-based fallback]` | An LLM call failed; the audit continued on rules | Same as the two rows above. The verdict is still valid (it comes from the policy floor) |
 | An online audit is slow when the model is busy | Each failed call retries with growing waits | Lower `MCP_SECURITY_AUDITOR_LLM_MAX_RETRIES` (default 3) and `MCP_SECURITY_AUDITOR_LLM_TIMEOUT_S` (default 30) |
 | `Vector store not built` in the analyst's tool results | `.chroma/` is not in git, so every machine builds its own | `python -m mcp_security_auditor.rag.ingest` (about 4 minutes, 345 embedding requests) |

@@ -68,8 +68,32 @@ Observations passed to teammates (their files):
 
 - `schemas.py` and `state.py` are frozen as of 11 November 2026.
 - Enforced by `tests/test_contract_freeze.py`: it stores today's field names and enum values and fails if any is removed or renamed, or if a new field has no default. Adding Optional fields and new enum values still passes.
+- Additive fields agreed at the freeze (before it was merged): `AuditRecord.permissions`, `AuditRecord.dependencies`,
+  `AuditState.policy_floor`, `AuditState.policy_reason` (see section 6c).
 - Member C verified the `OwaspCategory` names against the ingested PDFs; the LLM ids follow the **2025** edition of the LLM Top 10 (the 2026 edition renumbers entries). Recorded in the `OwaspCategory` docstring; state it in the report.
 - To change a contract from now on: PR titled `contract: ...`, agreed with the team, and update the snapshot in the freeze test in the same PR.
+
+## 6b. Free-tier limit found on 11 November
+
+A run with `gemini-3.8-flash` returned `429 RESOURCE_EXHAUSTED ... limit: 20 ... requests per day`. That is about
+1 to 2 audits per day per key on that model; `gemini-3.5-flash-lite` has its own separate limit and kept working.
+Impact: the evaluation (about 20 samples x 10 to 15 calls) cannot run on 3.8-flash in one day. Proposed for the
+weekly sync: develop and evaluate on flash-lite, keep 3.8-flash for a final comparison or the demo.
+
+## 6c. Code review fixes (§9; Safeguards for the report)
+
+A review of the whole codebase found three gaps. Each was first reproduced offline, then fixed, and each fix
+has a test that fails on the old code and passes on the new one (`tests/test_guardrails.py`).
+
+| # | Gap (reproduced) | Fix |
+|---|---|---|
+| 1 | **The LLM could weaken the verdict.** The policy floor was computed from the LLM's findings only. With the analyst LLM rating the SSH-stealing instruction `high` (as Gemini did in the first online run) and a sandbox run where the mock agent did not obey, `poisoned_math` got a floor of `install_with_mitigations`. The analyst safety net did not help: it only re-adds a critical finding the LLM *omitted*, not one it *under-rated* | `policy_verdict` takes the highest of the findings' severity and the deterministic scanner's severity hints. Floor and reason are stored in the new state fields `policy_floor` / `policy_reason` and printed as `policy minimum` (kept out of `FinalReport`, the LLM's SOM target, so the LLM never fills in its own floor) |
+| 2 | **Rug pulls through permissions or dependencies were missed.** v2 of the calculator with identical descriptions but new `shell:exec`, `fs:*` and an unknown dependency gave `rug_pull_detected: False` | `AuditRecord` gains optional `permissions` and `dependencies`; intake flags any *added* permission or dependency (removals and version bumps of existing dependencies are normal updates) |
+| 3 | **The red team ran on packages it cannot test.** `vuln_deps_pdf` (only CVE findings, no affected tool) went to the red team, which then "attacked" an innocent tool: wasted LLM calls | `should_red_team` counts only high findings that name a tool (plus injection signs and rug pulls, as before). Offline evaluation unchanged at 7/7; the red team now skips 2 of 7 samples |
+
+Passed to teammates: B (permission-diff bug confirmed in the online run; hidden-parameter stuffing not counted as
+obeying), C (the evaluation runs each sample on a fresh thread so rug-pull detection is never exercised; it
+cannot tell when a run fell back to rules; one failing sample stops the run).
 
 ## 7. Demo video notes
 
