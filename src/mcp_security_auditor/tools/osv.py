@@ -24,11 +24,14 @@ def query_osv_one(name: str, version: str, ecosystem: str = "PyPI") -> Dependenc
         r = requests.post(OSV_URL, json=payload, timeout=settings.osv_timeout_s)
         r.raise_for_status()
         vulns = r.json().get("vulns", [])
-        return DependencyVuln(
-            package=name,
-            version=version,
-            vuln_ids=[v.get("id", "") for v in vulns][:10],
-            summaries=[(v.get("summary") or v.get("details", ""))[:200] for v in vulns][:5],
-        )
+        ids, summaries = [], []
+        for v in vulns:
+            # OSV lists the same flaw once per advisory database (GHSA-..., PYSEC-...):
+            # use its CVE alias when it has one, and keep each flaw only once
+            vid = next((a for a in v.get("aliases", []) if a.startswith("CVE-")), v.get("id", ""))
+            if vid not in ids:
+                ids.append(vid)
+                summaries.append((v.get("summary") or v.get("details", ""))[:200])
+        return DependencyVuln(package=name, version=version, vuln_ids=ids[:10], summaries=summaries[:5])
     except Exception as e:  # network down, rate limited, bad ecosystem name...
         return DependencyVuln(package=name, version=version, error=f"{type(e).__name__}: {e}")
