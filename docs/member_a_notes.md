@@ -105,3 +105,94 @@ cannot tell when a run fell back to rules; one failing sample stops the run).
 1. Report prompt and `FinalReport` SOM quality.
 2. Tune `policy_verdict`.
 3. REPL polish for the demo: state diffs, history.
+
+---
+
+## 9. Week 2: report agent, policy floor, REPL (12 to 13 November 2026)
+
+**Branch:** `a/week2-report` (started from `a/week1-integration`, which is still waiting for review).
+`schemas.py` and `state.py` are unchanged, so the contract freeze holds.
+
+### 9.1 Policy floor tuning (§7 Safeguards, §9)
+
+| # | Gap (reproduced offline) | Fix |
+|---|---|---|
+| 1 | **Only the first reason was reported.** `rugpull_calc_v2` said "critical finding" and never mentioned the rug pull, because the first matching rule returned | `policy_triggers()` collects every rule that fires; the floor is the strictest, and `policy_reason` lists all reasons, strictest first |
+| 2 | **Known CVEs reached the floor only through the analyst's findings.** An analyst LLM rating them `low` allowed `install` | Any dependency with a known vuln id sets at least `install_with_mitigations` on its own |
+| 3 | **Same for unjustified permissions** (`permission_diff`) | Any unjustified permission sets at least `install_with_mitigations` |
+| 4 | **A failed CVE lookup looked like a clean result.** OSV down meant no CVEs, so `install` | Online only: a declared dependency whose OSV lookup failed, or was never made (the analyst LLM may skip `query_osv`), sets at least `install_with_mitigations` with the reason "dependencies could not be checked for known CVEs", a manual-check mitigation and an entry in `errors` |
+
+Design decision for rule 4: **it does not apply in OFFLINE mode.** `osv.py` calls OSV.dev even offline, so
+without this exception an offline run without internet would change verdicts. Checked by running the offline
+eval with OSV unreachable (`HTTPS_PROXY` pointed at a closed port): `benign_weather` stays `install`.
+The same experiment showed an existing weakness: `vuln_deps_pdf` drops to `install` offline without network,
+because its CVEs come only from the live lookup. Member C's OSV cache task (week 2) fixes this.
+
+### 9.2 Report prompt and Structured Output (§6, §9)
+
+- `REPORT_SYSTEM` now defines the three verdicts, states that the policy minimum is binding (stricter allowed,
+  with a reason), asks for a 3 to 6 sentence rationale for a non-expert that names the tool and the evidence,
+  and asks for concrete, de-duplicated mitigations, each naming its tool, permission or dependency.
+- **Spotlighting in the report agent too.** Findings evidence contains attacker text, so everything derived
+  from the package reaches the LLM inside `<untrusted>` tags, and a closing tag inside package text is escaped.
+  Only the policy minimum is outside the tags.
+- The patcher now runs **before** the LLM call (it is deterministic), so the report can tell the user to use
+  the patched manifest.
+- Post-check on the SOM result: a non-install verdict with no mitigations is filled from the findings and
+  noted in `errors` (in addition to the week 1 floor guardrail).
+- Offline and fallback report: a real rationale built from the policy reasons, the findings and the sandbox
+  result, instead of "Policy decision: ...". Mitigations are grouped: `vuln_deps_pdf` used to list
+  "Upgrade to a fixed version." three times; it now shows one line naming `pyyaml==5.3, requests==2.19.0,
+  pillow==8.0.0` (matched through the OSV ids, not the finding text).
+
+### 9.3 REPL polish for the demo (§3, demo video)
+
+- **State diff after every node**: only fields that changed, as `before -> after`
+  (`needs_red_team: False -> True`, `audit_history: +1 (now 2)`). On a second audit on the same thread,
+  the fields `intake` resets are collapsed into one line.
+- **`history`** groups checkpoints by audit (`audit 2: calc-pro-mcp v1.0.1 -> block, RUG PULL`) and shows,
+  for each step, the node that wrote the checkpoint and the fields it changed. `history full` keeps the raw view.
+- New commands: `help`, `samples`, `report`, `patched`, a readable `state`; `audit poisoned_math` works
+  without the path (also on the command line).
+
+### 9.4 Verification
+
+- Tests: 43 pass (24 at the end of week 1). New: `tests/test_report.py` (fake-LLM tests of the online path),
+  `tests/test_main.py` (diff function and a scripted REPL session), 7 new tests in `tests/test_guardrails.py`.
+- Offline eval: 7/7 (unchanged).
+- **A mistake found on the way (§9):** the first version of the "failed OSV lookup, online" test switched the
+  report module to online mode but did not replace the LLM, so it made one real Gemini call (25 s). Fixed with
+  a fake LLM that always raises; all online-mode tests now replace `get_llm`.
+
+### 9.5 Online check: `poisoned_math` on `gemini-3.5-flash-lite` (13 November 2026)
+
+| Item | Result |
+|---|---|
+| Verdict | `block` (policy minimum `block`: "there is at least one critical finding"); the floor guardrail did not need to fire |
+| Report SOM | validated, no parse error |
+| Analyst SOM | **failed with `504 DEADLINE_EXCEEDED`** (server timeout, not a parse error); the rule-based findings were used, as designed |
+| Sandbox | ran; `mock_agent_obeyed: false` |
+
+Rationale returned by the LLM:
+> This package is blocked due to critical security findings including hidden instructions in the add tool
+> description and references to sensitive credential paths like ~/.ssh. These issues represent a severe risk of
+> agent goal hijack and tool misuse where the package works against the user. Although a patched manifest was
+> produced, the presence of critical findings requires a block per policy until the underlying tool poisoning
+> and path access risks are fully resolved. Before this package could be reconsidered, the add tool must have
+> its injected instructions completely removed and all unauthorized access to credential files must be eliminated.
+
+Mitigations: remove the injected instructions from `add`; deny access to credential paths such as `~/.ssh`;
+use the patched manifest. All three name the tool, and the patched manifest is used, as the prompt asks.
+
+Observations:
+- The rationale does not mention the sandbox result, although the prompt asks for it. Possible prompt tweak.
+- **For Member B:** the mock agent called `add` with an extra argument `"sidenote": "user request"`, which is
+  the hidden-parameter stuffing the poisoned description asks for, but the sandbox reported
+  `mock_agent_obeyed: false`. Same issue as noted in week 1.
+- **For Member C:** the analyst's SOM call timed out (504) on flash-lite; worth checking prompt size.
+
+### 9.6 Still to do in week 2
+
+1. Get `a/week1-integration` and then `a/week2-report` reviewed and merged.
+2. One more online check after B's and C's week 2 prompts merge.
+3. Agree with B what counts as `mock_agent_obeyed`; it feeds the policy floor.
