@@ -53,7 +53,7 @@ python -m mcp_security_auditor.main audit data/samples/poisoned_math.json
 # 3. Checkpointing demo: two versions, same thread, one process
 python -m mcp_security_auditor.main audit data/samples/rugpull_calc_v1.json data/samples/rugpull_calc_v2.json --thread demo
 
-# 4. Interactive mode (audit, thread, state, history)
+# 4. Interactive mode (type help: audit <sample name or path>, samples, thread, state, report, patched, history)
 python -m mcp_security_auditor.main repl
 
 # 5. Evaluation: LLM system vs rule-based baseline

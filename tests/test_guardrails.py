@@ -15,7 +15,8 @@ from mcp_security_auditor.agents.report import policy_verdict
 from mcp_security_auditor.graph import build_graph
 from mcp_security_auditor.routing import should_red_team
 from mcp_security_auditor.schemas import (
-    AuditFindings, Dependency, Finding, OwaspCategory, RedTeamResult, Severity, ToolPackage, Verdict,
+    AuditFindings, Dependency, DependencyVuln, Finding, OwaspCategory, PermissionDiff, RedTeamResult, Severity,
+    ToolPackage, Verdict,
 )
 from mcp_security_auditor.state import AuditState
 from mcp_security_auditor.tools.manifest_scanner import scan_package
@@ -118,3 +119,99 @@ def test_red_team_when_a_tool_has_a_high_finding():
     pkg = load("vuln_deps_pdf")
     findings = AuditFindings(findings=[_finding(OwaspCategory.ASI05, Severity.HIGH, pkg.tools[0].name)])
     assert should_red_team(AuditState(package=pkg, scan_report=scan_package(pkg), findings=findings)) is True
+
+
+# --- 4. week 2 policy tuning ---------------------------------------------------
+# Two deterministic tool outputs reached the floor only through the analyst's
+# findings, so an analyst LLM that rated them "low" could allow a plain install.
+def test_known_cves_set_the_floor_even_if_the_analyst_rates_them_low():
+    pkg = load("benign_weather")
+    state = AuditState(package=pkg, scan_report=scan_package(pkg),
+                       findings=AuditFindings(findings=[_finding(OwaspCategory.ASI04, Severity.LOW)]),
+                       dependency_vulns=[DependencyVuln(package="pyyaml", version="5.3",
+                                                        vuln_ids=["CVE-2020-1747", "CVE-2020-14343"])])
+    floor, reason = policy_verdict(state)
+    assert floor == Verdict.INSTALL_WITH_MITIGATIONS
+    assert "pyyaml 5.3 (2)" in reason
+
+
+def test_unjustified_permissions_set_the_floor_even_if_the_analyst_rates_them_low():
+    pkg = load("benign_weather")
+    state = AuditState(package=pkg, scan_report=scan_package(pkg), findings=AuditFindings(),
+                       permission_diff=PermissionDiff(unjustified_permissions=["fs:*"]))
+    floor, reason = policy_verdict(state)
+    assert floor == Verdict.INSTALL_WITH_MITIGATIONS
+    assert "fs:*" in reason
+
+
+def _online(monkeypatch):
+    """Report module in online mode, with an LLM that always fails: the policy
+    report is used and no real API call can happen."""
+    import mcp_security_auditor.agents.report as report
+
+    class FailingLLM:
+        def with_structured_output(self, schema):
+            return self
+
+        def invoke(self, messages):
+            raise RuntimeError("fake LLM: no network in tests")
+
+    monkeypatch.setattr(report, "settings", dataclasses.replace(report.settings, offline=False))
+    monkeypatch.setattr(llm_module, "get_llm", lambda: FailingLLM())
+    return report
+
+
+def _failed_lookup_state():
+    pkg = load("benign_weather")  # declares httpx 0.27.0
+    return AuditState(package=pkg, scan_report=scan_package(pkg), findings=AuditFindings(),
+                      dependency_vulns=[DependencyVuln(package="httpx", version="0.27.0", error="ConnectionError: x")])
+
+
+def test_failed_osv_lookup_raises_the_floor_online(monkeypatch):
+    report = _online(monkeypatch)
+    state = _failed_lookup_state()
+    floor, reason = policy_verdict(state)
+    assert floor == Verdict.INSTALL_WITH_MITIGATIONS
+    assert "dependencies could not be checked for known CVEs: httpx 0.27.0" in reason
+    out = report.report_node(state.model_copy(update={"findings": AuditFindings()}))
+    assert any("check these dependencies for known cves manually" in m.lower()
+               for m in out["final_report"].required_mitigations)
+    assert any("OSV lookup failed" in e for e in out["errors"])
+
+
+def test_dependency_never_looked_up_counts_as_unchecked_online(monkeypatch):
+    _online(monkeypatch)
+    state = _failed_lookup_state().model_copy(update={"dependency_vulns": []})
+    assert policy_verdict(state)[0] == Verdict.INSTALL_WITH_MITIGATIONS
+
+
+def test_successful_lookup_with_no_cves_allows_install_online(monkeypatch):
+    _online(monkeypatch)
+    state = _failed_lookup_state().model_copy(update={"dependency_vulns": [
+        DependencyVuln(package="HTTPX", version="==0.27.0")]})  # name/version spelt differently by an LLM
+    assert policy_verdict(state)[0] == Verdict.INSTALL
+
+
+def test_failed_osv_lookup_does_not_count_in_offline_mode():
+    """osv.py calls OSV.dev even in OFFLINE mode; an offline run without internet
+    must not change the verdicts (offline eval stays 7/7)."""
+    state = _failed_lookup_state()
+    assert policy_verdict(state)[0] == Verdict.INSTALL
+    out = build_graph().invoke({"package": load("benign_weather")}, {"configurable": {"thread_id": "osv-offline"}})
+    assert not any("OSV lookup failed" in e for e in out["errors"])
+
+
+def test_reason_lists_every_trigger_strictest_first():
+    """Before week 2, rugpull_calc_v2 reported only the critical finding and never
+    mentioned the rug pull, because the first matching rule returned."""
+    out = _audit_twice(load("rugpull_calc_v1"), load("rugpull_calc_v2"), "all-reasons")
+    floor, reason = out["policy_floor"], out["policy_reason"]
+    assert floor == Verdict.BLOCK
+    assert "critical" in reason and "rug pull" in reason
+    pkg = load("overbroad_formatter")
+    state = AuditState(package=pkg, scan_report=scan_package(pkg),
+                       red_team_results=[RedTeamResult(target_tool="fmt", attack_prompt="p", mock_agent_obeyed=True)],
+                       permission_diff=PermissionDiff(unjustified_permissions=["fs:*"]))
+    floor, reason = policy_verdict(state)
+    assert floor == Verdict.BLOCK
+    assert reason.index("obeyed") < reason.index("fs:*")
