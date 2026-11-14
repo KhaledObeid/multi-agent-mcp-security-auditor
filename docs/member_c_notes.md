@@ -90,6 +90,29 @@ Method: `search_kb(query, k=4)` (plain similarity search, as in the skeleton). R
 - **W2: Short notes outrank primary sources.** Several hits came from `seed_notes.md` or the incident notes rather than the official OWASP documents; all four results for query 1 came from one file. *Planned fix:* decide whether to remove or reduce `seed_notes.md` (`SOURCES.md` describes it as a starter to replace) and use MMR retrieval for diversity.
 - **W3: Some irrelevant passages.** For example, query 4 rank 4 (token theft) and query 5 rank 3 (model poisoning).
 
+### 5.1 Week 2: changes and automated evaluation (14 November)
+
+**Changes** (branch `c/week2-retrieval`):
+- **W1 fixed.** `rag/ingest.py` now tags each chunk with the OWASP chapter it belongs to: a page holding exactly one heading of its document's own family (`ASI05: …`, `LLM06:2025 …`) opens a chapter, and the following pages inherit it; contents, summary-table and appendix pages close it. Labelled chunks rose from 92/345 to **264/342**, and cross-references no longer add labels (p.10 is now ASI01 only). Each id is also stored as a boolean flag, so retrieval can be restricted to one chapter (`filter={"ASI05": True}`).
+- **W2 addressed.** `seed_notes.md` removed (§8, item 4); every result now carries a page-level citation, e.g. `OWASP-Agentic-Top10-2026.pdf p.22 (ASI05)`, which the Threat Analyst copies into `references`.
+- The store was rebuilt once (342 chunks, 342 embedding requests). The offline test suite grew from 10 to 43 tests (`tests/test_ingest_sections.py`).
+
+**Method.** `eval/retrieval_eval.py` runs 12 labelled queries: queries 1–5 are the Week 1 queries above, and 6–12 mirror the scanner's flags (secret files, outbound URLs, CVEs, memory poisoning, destructive actions, cross-server shadowing, unvalidated output). A returned chunk counts as correct when its chapter tags contain one of the query's expected OWASP ids. Each query is embedded once and the vector is reused for every method (12 embedding requests per run). Two runs gave identical results.
+
+| Method (k = 4) | hit@1 | hit@4 | Correct chunks (P@4) | MRR | Duplicates per query |
+|---|---|---|---|---|---|
+| **Similarity (default)** | 6/12 | **12/12** | **26/48 (0.54)** | **0.74** | 0.67 |
+| MMR, λ = 0.7 | 6/12 | 11/12 | 16/48 (0.33) | 0.69 | 0.25 |
+| MMR, λ = 0.5 | 6/12 | 11/12 | 13/48 (0.27) | 0.69 | 0.08 |
+
+**Findings.**
+1. Similarity search finds a correct chapter for all 12 queries. The Week 1 result (5/5) is confirmed, now graded automatically rather than by eye.
+2. **MMR [14] reduces duplicates but halves precision**, and it misses query 8 (CVEs) entirely. The evidence for one category lies on consecutive pages of a single chapter, which MMR treats as redundant: for query 9 (memory poisoning), similarity returned four ASI06 chunks (pp.25–27), while MMR with λ = 0.5 kept one. **Decision:** similarity search is the default in `search_kb`; MMR remains available as an option (`mmr=True`).
+3. hit@1 is 6/12 for every method. Of the six rank-1 misses under similarity search, three are chunks of the MCP best-practices guide, which has no OWASP chapters and is therefore always graded as a miss; two are incident-notes chunks and one is an OWASP chunk from another chapter. All scores are therefore lower bounds.
+4. Residual W2: the incident notes appear in the similarity top 4 for 8 of 12 queries. They are short and focused, so they score highly. They paraphrase a cited source [4], so this is acceptable, but it should be stated in the report.
+
+**Limitations.** One corpus; 12 queries written and labelled by the team; chapter tags are used as a proxy for relevance.
+
 ---
 
 ## 6. Code change 2: CVE identifiers in `tools/osv.py` (§5, §10)
@@ -125,11 +148,11 @@ Method: `search_kb(query, k=4)` (plain similarity search, as in the skeleton). R
 
 ## 8. Week 2 to-do list (Member C)
 
-1. Section-heading tagging of chunks (fixes W1); store per-id boolean metadata to enable filtering.
-2. MMR retrieval and an optional OWASP-category filter in `search_kb` (addresses W2).
-3. Retrieval hit-rate measurement on about 10 queries (hit@4, hit@1); chunk-size/overlap experiment, budgeted against the daily embedding quota.
-4. Decide on `seed_notes.md` (keep, shorten or remove) and record the decision.
-   **Decision (12 Nov 2026): removed.** Its wording echoed our scanner flags and test queries, so it outranked the OWASP documents (ranked 1st for queries 3–5), would have been cited instead of primary sources, and inflated hit@k. The section-heading tagging (item 1) gives OWASP chunks their own labels, which removes its only advantage. Takes effect at the next rebuild (340 chunks instead of 345).
+1. Section-heading tagging of chunks (fixes W1); store per-id boolean metadata to enable filtering. **Done (14 Nov), §5.1.**
+2. MMR retrieval and an optional OWASP-category filter in `search_kb` (addresses W2). **Done (14 Nov): filter adopted; MMR measured and left off by default, §5.1.**
+3. Retrieval hit-rate measurement on about 10 queries (hit@4, hit@1). **Done (14 Nov): 12 queries, §5.1.** Remaining: chunk-size/overlap experiment, budgeted against the daily embedding quota.
+4. Decide on `seed_notes.md` (keep, shorten or remove) and record the decision. **Done.**
+   **Decision (12 Nov 2026): removed.** Its wording echoed our scanner flags and test queries, so it outranked the OWASP documents (ranked 1st for queries 3–5), would have been cited instead of primary sources, and inflated hit@k. The section-heading tagging (item 1) gives OWASP chunks their own labels, which removes its only advantage. Applied at the 14 November rebuild (342 chunks).
 5. OSV: sort by severity (CVSS), cache responses for offline demos, and use `/v1/querybatch` for many dependencies.
 6. Improve `ANALYST_SYSTEM` and `FINDINGS_SYSTEM` prompts (category definitions, citation of corpus sources).
 
@@ -155,3 +178,4 @@ Method: `search_kb(query, k=4)` (plain similarity search, as in the skeleton). R
 11. S. Yao et al. *ReAct: Synergizing Reasoning and Acting in Language Models*. ICLR 2023. https://arxiv.org/abs/2210.03629
 12. K. Hines et al. *Defending Against Indirect Prompt Injection Attacks With Spotlighting*. 2024. https://arxiv.org/abs/2403.14720
 13. OWASP. *LLM01:2025 Prompt Injection*. https://genai.owasp.org/llmrisk/llm01-prompt-injection/
+14. J. Carbonell and J. Goldstein. *The Use of MMR, Diversity-Based Reranking for Reordering Documents and Producing Summaries*. Proc. ACM SIGIR 1998, pp. 335–336. https://doi.org/10.1145/290941.291025
