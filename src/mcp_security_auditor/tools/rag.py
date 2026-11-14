@@ -27,10 +27,22 @@ def _store():
     )
 
 
+def cite(meta: dict) -> str:
+    """Citation for one chunk, e.g. 'OWASP-Agentic-Top10-2026.pdf p.24 (ASI05)'."""
+    text = meta.get("source", "?")
+    if meta.get("page"):
+        text += f" p.{meta['page']}"
+    if meta.get("section"):
+        text += f" ({meta['section']})"
+    return text
+
+
 def search_kb(query: str, k: int = 4) -> list[dict]:
-    """Return [{source, owasp_ids, text}] for the top-k chunks."""
+    """Return [{source, page, section, owasp_ids, cite, text}] for the top-k chunks."""
     docs = _store().similarity_search(query, k=k)
     return [
-        {"source": d.metadata.get("source", "?"), "owasp_ids": d.metadata.get("owasp_ids", ""), "text": d.page_content}
+        {"source": d.metadata.get("source", "?"), "page": d.metadata.get("page"),
+         "section": d.metadata.get("section", ""), "owasp_ids": d.metadata.get("owasp_ids", ""),
+         "cite": cite(d.metadata), "text": d.page_content}
         for d in docs
     ]

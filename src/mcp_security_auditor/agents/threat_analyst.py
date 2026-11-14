@@ -59,7 +59,7 @@ def search_security_kb(query: str, k: int = 4) -> str:
     from mcp_security_auditor.tools.rag import search_kb
 
     hits = search_kb(query, k=k)
-    return "\n\n".join(f"[source: {h['source']} | ids: {h['owasp_ids']}]\n{h['text']}" for h in hits)
+    return "\n\n".join(f"[source: {h['cite']} | ids: {h['owasp_ids']}]\n{h['text']}" for h in hits)
 
 
 @tool

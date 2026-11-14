@@ -63,3 +63,22 @@ def test_flags_match_owasp_ids(chunks):
 def test_incident_notes_tagged_by_heading(chunks):
     tagged = {c.metadata["section"] for c in chunks if c.metadata["source"] == "mcp_incidents_notes.md"}
     assert {"ASI01", "ASI02", "ASI04"} <= tagged
+
+
+@pytest.mark.parametrize("meta, expected", [
+    ({"source": AGENTIC, "page": 24, "section": "ASI05"}, f"{AGENTIC} p.24 (ASI05)"),
+    ({"source": AGENTIC, "page": 45, "section": ""}, f"{AGENTIC} p.45"),
+    ({"source": "mcp_incidents_notes.md", "section": "ASI04"}, "mcp_incidents_notes.md (ASI04)"),
+    ({}, "?"),
+])
+def test_citation_format(meta, expected):
+    from mcp_security_auditor.tools.rag import cite
+
+    assert cite(meta) == expected
+
+
+def test_every_chunk_gets_a_page_level_citation(chunks):
+    from mcp_security_auditor.tools.rag import cite
+
+    pdf = [c for c in chunks if c.metadata["source"].endswith(".pdf")]
+    assert pdf and all(f" p.{c.metadata['page']}" in cite(c.metadata) for c in pdf)
