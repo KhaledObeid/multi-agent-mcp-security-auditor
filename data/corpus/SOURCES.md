@@ -1,7 +1,7 @@
 # RAG corpus sources (Member C)
 
 Put downloaded files (PDF, .md or .txt) directly in this folder, then run `python -m mcp_security_auditor.rag.ingest`.
-The team-written starter `seed_notes.md` was removed on 12 November 2026 because its wording matched our own test queries and outranked the primary sources below. Cite every source below in the report's attribution section.n.
+The team-written starter `seed_notes.md` was removed on 12 November 2026 because its wording matched our own test queries and outranked the primary sources below. Cite every source below in the report's attribution section.
 
 | Source | Where to get it | Use it for |
 |---|---|---|
