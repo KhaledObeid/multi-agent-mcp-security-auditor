@@ -117,11 +117,12 @@ def fake_store(monkeypatch):
 
 
 @pytest.mark.parametrize("kwargs, expected_calls", [
-    ({}, [("mmr", None)]),                                               # MMR is the default
-    ({"mmr": False}, [("similarity", None)]),
-    ({"category": " asi05 "}, [("mmr", {"ASI05": True})]),               # normalised id
-    ({"category": "Agent Goal Hijack"}, [("mmr", None)]),                # not an id: no filter
-    ({"category": "ASI99"}, [("mmr", {"ASI99": True}), ("mmr", None)]),  # empty chapter: fall back
+    ({}, [("similarity", None)]),                                        # similarity is the default
+    ({"mmr": True}, [("mmr", None)]),
+    ({"category": " asi05 "}, [("similarity", {"ASI05": True})]),        # normalised id
+    ({"category": "Agent Goal Hijack"}, [("similarity", None)]),         # not an id: no filter
+    ({"category": "ASI99"}, [("similarity", {"ASI99": True}), ("similarity", None)]),  # empty chapter: fall back
+    ({"category": "ASI05", "mmr": True}, [("mmr", {"ASI05": True})]),
 ])
 def test_search_kb_mmr_and_category_filter(fake_store, kwargs, expected_calls):
     from mcp_security_auditor.tools.rag import search_kb
@@ -129,3 +130,23 @@ def test_search_kb_mmr_and_category_filter(fake_store, kwargs, expected_calls):
     hits = search_kb("shell access", **kwargs)
     assert fake_store.calls == expected_calls
     assert hits[0]["cite"] == f"{AGENTIC} p.22 (ASI05)"
+
+
+def test_retrieval_eval_grading():
+    import importlib.util
+    from pathlib import Path
+
+    from langchain_core.documents import Document
+
+    path = Path(__file__).resolve().parents[1] / "eval" / "retrieval_eval.py"
+    spec = importlib.util.spec_from_file_location("retrieval_eval", path)
+    ev = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ev)
+
+    def doc(ids, page=None, section="", source="mcp_incidents_notes.md"):
+        return Document(page_content="", metadata={"owasp_ids": ids, "page": page, "section": section, "source": source})
+
+    docs = [doc("ASI02", section="ASI02"), doc("ASI01", section="ASI01"),       # notes: two sections, no page
+            doc("ASI05", 22, "ASI05", AGENTIC), doc("ASI05", 22, "ASI05", AGENTIC)]  # same PDF page twice
+    g = ev.grade(docs, {"ASI01", "ASI05"})
+    assert (g["hit1"], g["hitk"], g["correct"], g["rr"], g["dup"]) == (False, True, 3, 0.5, 1)

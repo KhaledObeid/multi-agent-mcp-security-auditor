@@ -1,9 +1,12 @@
 """Tool: vectorized RAG over the security corpus (MANDATORY tool). OWNER: Member C.
 
-Retrieval: MMR by default (relevant but mutually different chunks, so two
-neighbouring chunks of one page do not fill two of the k slots), with an
-optional OWASP category filter on the per-id flags written by rag/ingest.py.
-Both cost one embedding request per query, like plain similarity search.
+Retrieval: plain similarity search by default, with an optional OWASP category
+filter on the per-id flags written by rag/ingest.py. MMR (relevant but mutually
+different chunks) is available via mmr=True but is off: on the 12 labelled
+queries of eval/retrieval_eval.py it halved the correct chunks in the top 4
+(13/48 vs 26/48) and lost one query, because the evidence for a category sits on
+consecutive pages of one chapter, which MMR treats as redundant.
+Every variant costs one embedding request per query.
 
 TODO (Member C):
   - Measure retrieval quality: for ~10 hand-written queries, is the right
@@ -44,14 +47,14 @@ def cite(meta: dict) -> str:
 OWASP_CATEGORY = re.compile(r"(ASI|LLM)\d{2}")
 
 
-def search_kb(query: str, k: int = 4, category: str | None = None, mmr: bool = True,
+def search_kb(query: str, k: int = 4, category: str | None = None, mmr: bool = False,
               fetch_k: int = 20, lambda_mult: float = 0.5) -> list[dict]:
     """Return [{source, page, section, owasp_ids, cite, text}] for the top-k chunks.
 
     category: an OWASP id such as "ASI05" restricts the search to chunks tagged with it;
               anything else (or a category with no chunks) falls back to the whole corpus.
-    mmr:      Maximal Marginal Relevance over the fetch_k most similar chunks; lambda_mult
-              trades relevance (1.0) against diversity (0.0).
+    mmr:      Maximal Marginal Relevance over the fetch_k most similar chunks (off by default,
+              see the module docstring); lambda_mult trades relevance (1.0) against diversity (0.0).
     """
     store = _store()
     cat = (category or "").strip().upper()
