@@ -51,14 +51,17 @@ references should name corpus sources or OSV ids from the dossier."""
 # tools
 # --------------------------------------------------------------------------- #
 @tool
-def search_security_kb(query: str, k: int = 4) -> str:
+def search_security_kb(query: str, k: int = 4, category: str = "") -> str:
     """Semantic search over the security knowledge base (OWASP Agentic Top 10, OWASP LLM Top 10,
-    MCP security guidance, incident write-ups). Returns the top-k passages with their source."""
+    MCP security guidance, incident write-ups). Returns the top-k passages, each with a citation
+    (file, page, OWASP chapter) to copy into references.
+    category: optional OWASP id (e.g. "ASI05", "LLM01") to search only that chapter, for example
+    to fetch its mitigations once you know the category. Leave empty to search everything."""
     if settings.offline:
         return "KB unavailable in offline mode."
     from mcp_security_auditor.tools.rag import search_kb
 
-    hits = search_kb(query, k=k)
+    hits = search_kb(query, k=k, category=category or None)
     return "\n\n".join(f"[source: {h['cite']} | ids: {h['owasp_ids']}]\n{h['text']}" for h in hits)
 
 

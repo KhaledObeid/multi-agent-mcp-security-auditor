@@ -82,3 +82,50 @@ def test_every_chunk_gets_a_page_level_citation(chunks):
 
     pdf = [c for c in chunks if c.metadata["source"].endswith(".pdf")]
     assert pdf and all(f" p.{c.metadata['page']}" in cite(c.metadata) for c in pdf)
+
+
+class _FakeStore:
+    """Stands in for Chroma: records each call, returns nothing when asked for an empty category."""
+
+    def __init__(self):
+        self.calls = []
+
+    def _docs(self, f):
+        from langchain_core.documents import Document
+
+        if f == {"ASI99": True}:
+            return []
+        return [Document(page_content="text", metadata={"source": AGENTIC, "page": 22, "section": "ASI05",
+                                                        "owasp_ids": "ASI05"})]
+
+    def max_marginal_relevance_search(self, query, k, fetch_k, lambda_mult, filter):
+        self.calls.append(("mmr", filter))
+        return self._docs(filter)
+
+    def similarity_search(self, query, k, filter):
+        self.calls.append(("similarity", filter))
+        return self._docs(filter)
+
+
+@pytest.fixture
+def fake_store(monkeypatch):
+    from mcp_security_auditor.tools import rag
+
+    store = _FakeStore()
+    monkeypatch.setattr(rag, "_store", lambda: store)
+    return store
+
+
+@pytest.mark.parametrize("kwargs, expected_calls", [
+    ({}, [("mmr", None)]),                                               # MMR is the default
+    ({"mmr": False}, [("similarity", None)]),
+    ({"category": " asi05 "}, [("mmr", {"ASI05": True})]),               # normalised id
+    ({"category": "Agent Goal Hijack"}, [("mmr", None)]),                # not an id: no filter
+    ({"category": "ASI99"}, [("mmr", {"ASI99": True}), ("mmr", None)]),  # empty chapter: fall back
+])
+def test_search_kb_mmr_and_category_filter(fake_store, kwargs, expected_calls):
+    from mcp_security_auditor.tools.rag import search_kb
+
+    hits = search_kb("shell access", **kwargs)
+    assert fake_store.calls == expected_calls
+    assert hits[0]["cite"] == f"{AGENTIC} p.22 (ASI05)"
