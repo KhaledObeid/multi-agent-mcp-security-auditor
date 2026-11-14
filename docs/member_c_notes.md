@@ -129,6 +129,7 @@ Method: `search_kb(query, k=4)` (plain similarity search, as in the skeleton). R
 2. MMR retrieval and an optional OWASP-category filter in `search_kb` (addresses W2).
 3. Retrieval hit-rate measurement on about 10 queries (hit@4, hit@1); chunk-size/overlap experiment, budgeted against the daily embedding quota.
 4. Decide on `seed_notes.md` (keep, shorten or remove) and record the decision.
+   **Decision (12 Nov 2026): removed.** Its wording echoed our scanner flags and test queries, so it outranked the OWASP documents (ranked 1st for queries 3–5), would have been cited instead of primary sources, and inflated hit@k. The section-heading tagging (item 1) gives OWASP chunks their own labels, which removes its only advantage. Takes effect at the next rebuild (340 chunks instead of 345).
 5. OSV: sort by severity (CVSS), cache responses for offline demos, and use `/v1/querybatch` for many dependencies.
 6. Improve `ANALYST_SYSTEM` and `FINDINGS_SYSTEM` prompts (category definitions, citation of corpus sources).
 
