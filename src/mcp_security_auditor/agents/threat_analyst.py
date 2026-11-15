@@ -9,14 +9,19 @@ Nodes:
   analyst_tools_node        -> executes them, stores dependency_vulns / retrieved_sources
   analyst_findings_node     -> SOM call -> AuditFindings, plus a rule-based safety net
 
+Prompts (week 2): one-line category definitions from the OWASP chapters, a severity
+rubric that never goes below the Inspector's severity_hint, a two-round research plan
+(behaviour search, then the chosen chapter's mitigations via the category filter),
+and references copied verbatim from the [source: ...] citations or OSV results.
+The dossier keeps every citation of a search result (see _compact_kb).
+
 TODO (Member C):
-  - Improve both prompts (ANALYST_SYSTEM, FINDINGS_SYSTEM): category definitions,
-    severity rubric, "cite the corpus source in references".
   - Tune rule_based_findings(); it doubles as the non-LLM baseline in eval.
 """
 from __future__ import annotations
 
 import json
+import re
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
@@ -32,19 +37,54 @@ from mcp_security_auditor.utils.tool_exec import bump_round, run_tool_calls
 
 AGENT = "analyst"
 
+# One line per category, summarised from each chapter's "Description" in the corpus PDFs.
+CATEGORY_GUIDE = """OWASP categories (pick the single best fit):
+- ASI01 Agent Goal Hijack: content (e.g. a tool description) that redirects the agent's goals or instructions.
+- ASI02 Tool Misuse and Exploitation: a legitimate tool used unsafely: data exfiltration, unintended actions, chaining.
+- ASI03 Identity and Privilege Abuse: excess privileges, scopes or credentials beyond the stated purpose; escalation.
+- ASI04 Agentic Supply Chain Vulnerabilities: malicious, compromised or tampered third-party tools, packages or
+  updates, including known-vulnerable dependencies and tool definitions changed after approval (rug pull).
+- ASI05 Unexpected Code Execution: shell, code or command execution reachable through the tool.
+- ASI06 Memory and Context Poisoning: malicious data stored in memory or context that biases later sessions.
+- ASI07 Insecure Inter-Agent Communication: unauthenticated or tamperable messages between agents.
+- ASI08 Cascading Failures: one fault propagating across agents or tools.
+- ASI09 Human-Agent Trust Exploitation: misleading the user into approving harmful actions.
+- ASI10 Rogue Agents: an agent acting outside its intended scope after compromise or drift.
+- LLM01 Prompt Injection: inputs, visible or invisible (e.g. Unicode tag characters), that alter the model's behaviour.
+- LLM02 Sensitive Information Disclosure: exposure of credentials, personal or confidential data.
+- LLM03 Supply Chain: vulnerable or tampered third-party components (models, data, libraries).
+- LLM06 Excessive Agency: more functionality, permissions or autonomy than the task needs."""
+
 ANALYST_SYSTEM = f"""You are the Threat Analyst in a security audit team for MCP servers and agent tools.
-You receive the Inspector's scan results. For each suspicious signal:
-1. Call search_security_kb to find the matching OWASP Agentic Top 10 / LLM Top 10 category and its mitigations.
-2. Call query_osv once per dependency to find known vulnerabilities.
-Then write a short analysis tying each signal to a category, with evidence. Do not give a final verdict.
+You receive the Inspector's scan report (each flag has a kind, a tool, evidence and a severity_hint), the permission
+diff, the dependencies and the rug-pull status.
+Research plan (you may request several tool calls in one turn; do each step in one turn):
+1. For each distinct kind of signal (flag kind, unjustified permissions, rug pull), call search_security_kb with a
+   query that describes the behaviour, e.g. "tool description tells the agent to read SSH keys". In the same turn,
+   call query_osv once for every dependency.
+2. For each OWASP category you settle on, call search_security_kb with category set to its id (e.g. "ASI01") and a
+   query such as "prevention and mitigation" to retrieve that chapter's mitigations.
+Then write a short analysis: for each signal give the category, the scanner's severity_hint, the evidence, and the
+citations (the text after "[source:") that support it. Do not give a final verdict.
+{CATEGORY_GUIDE}
 {UNTRUSTED_RULE}"""
 
-FINDINGS_SYSTEM = """Convert the audit dossier into an AuditFindings object.
-One Finding per distinct issue. Severity rubric: critical = the tool can make an agent leak secrets or act against the
-user; high = code execution, hidden or invisible instructions, or known exploitable CVEs; medium = excessive or
-unjustified permissions; low = notable but expected behaviour; info = observation only.
+FINDINGS_SYSTEM = f"""Convert the audit dossier into an AuditFindings object.
+One Finding per distinct issue (one signal on one tool); do not repeat an issue under a second category.
+Severity rubric:
+- critical: the package can make an agent leak secrets or credentials or act against the user, including any hidden
+  or invisible instruction that points the agent at secret files, data exfiltration or actions the user did not ask for.
+- high: code or shell execution; hidden or invisible instructions without such a target; a rug pull; known CVEs.
+- medium: excessive or unjustified permissions or scopes.
+- low: notable but expected behaviour for the stated purpose.
+- info: observation only.
+A finding's severity must never be lower than the severity_hint of the Inspector flag it is based on.
 evidence must quote or describe something actually present in the dossier. confidence is between 0 and 1.
-references should name corpus sources or OSV ids from the dossier."""
+references: copy citations exactly as written after "[source:" in the dossier (e.g.
+"OWASP-Agentic-Top10-2026.pdf p.22 (ASI05)") and vulnerability ids from query_osv results. Never invent or reword a
+reference; leave the list empty when nothing in the dossier supports the finding.
+{CATEGORY_GUIDE}
+{UNTRUSTED_RULE}"""
 
 
 # --------------------------------------------------------------------------- #
@@ -179,12 +219,57 @@ def rule_based_findings(state: AuditState) -> AuditFindings:
     return AuditFindings(findings=findings, summary=f"{len(findings)} rule-based finding(s).")
 
 
+KB_EXCERPT = 400   # characters kept from each retrieved passage in the dossier
+MSG_LIMIT = 3000   # characters kept from any other message
+_KB_BLOCK = re.compile(r"^(?=\[source:)", re.M)
+
+
+def _compact_kb(text: str) -> str:
+    """Keep every '[source: ...]' citation line of a search result, each with a short excerpt.
+
+    Cutting the whole result at a fixed length (as before) dropped passages 3-4 and their citations.
+    """
+    out = []
+    for block in _KB_BLOCK.split(text):
+        if not block.strip():
+            continue
+        head, _, body = block.partition("\n")
+        body = " ".join(body.split())
+        out.append(head if not body else f"{head}\n{body[:KB_EXCERPT]}{'...' if len(body) > KB_EXCERPT else ''}")
+    return "\n".join(out)
+
+
 def _dossier(state: AuditState) -> str:
     parts = [_brief(state), "\nAnalyst conversation (tool results and analysis):"]
     for m in state.analyst_messages[2:]:  # skip system + brief
-        label = f"TOOL {m.name}" if isinstance(m, ToolMessage) else "ANALYST"
-        parts.append(f"{label}: {msg_text(m)[:1500]}")
+        text = msg_text(m)
+        if isinstance(m, ToolMessage):
+            label = f"TOOL {m.name}"
+            text = _compact_kb(text) if m.name == "search_security_kb" else text[:MSG_LIMIT]
+        else:
+            label, text = "ANALYST", text[:MSG_LIMIT]
+        parts.append(f"{label}: {text}")
     return "\n".join(parts)
+
+
+def apply_safety_net(findings: AuditFindings, baseline: AuditFindings) -> tuple[AuditFindings, list[str]]:
+    """Never let the LLM drop or under-rate a critical deterministic finding.
+
+    Matches on (category, tool): a missing critical finding is added back, an under-rated one is raised to critical.
+    Returns the corrected findings and a note per correction (for state.errors, like the report's policy floor).
+    """
+    out, notes = list(findings.findings), []
+    for b in baseline.findings:
+        if b.severity != Severity.CRITICAL:
+            continue
+        i = next((i for i, f in enumerate(out) if (f.owasp_category, f.affected_tool) == (b.owasp_category, b.affected_tool)), None)
+        if i is None:
+            out.append(b)
+            notes.append(f"analyst safety net: added critical finding '{b.title}' ({b.affected_tool})")
+        elif out[i].severity != Severity.CRITICAL:
+            notes.append(f"analyst safety net: raised '{out[i].title}' ({b.affected_tool}) from {out[i].severity.value} to critical")
+            out[i] = out[i].model_copy(update={"severity": Severity.CRITICAL})
+    return (findings.model_copy(update={"findings": out}) if notes else findings), notes
 
 
 def analyst_findings_node(state: AuditState) -> dict:
@@ -204,11 +289,8 @@ def analyst_findings_node(state: AuditState) -> dict:
         except Exception as e:  # parsing / validation failure -> fall back, never crash the audit
             errors.append(f"analyst SOM failed, using rule-based findings: {type(e).__name__}: {e}")
             findings = baseline
-        # safety net: never let the LLM silently drop a critical deterministic finding
-        have = {(f.owasp_category, f.affected_tool) for f in findings.findings}
-        missing = [f for f in baseline.findings if f.severity == Severity.CRITICAL and (f.owasp_category, f.affected_tool) not in have]
-        if missing:
-            findings = findings.model_copy(update={"findings": findings.findings + missing})
+        findings, notes = apply_safety_net(findings, baseline)
+        errors += notes
 
     probe = state.model_copy(update={"findings": findings})
     return {"findings": findings, "needs_red_team": should_red_team(probe), "errors": errors}
