@@ -21,7 +21,7 @@ Member B owns the attack-surface side of the auditor (`docs/PLAN.md`): the two a
 | `data/samples/*` | Labelled synthetic tool packages + `labels.json` |
 | `tests/test_scanner.py` | Scanner and permission-diff tests |
 
-Week 1 deliverables (from `docs/PLAN.md`): **(a)** fix the permission-diff self-justification bug with a regression test; **(b)** add three new scanner rules, each with a test. **Status: (a) complete (16 November 2026); (b) in progress — scheduled next.**
+Week 1 deliverables (from `docs/PLAN.md`): **(a)** fix the permission-diff self-justification bug with a regression test; **(b)** add three new scanner rules, each with a test. **Status: both complete (16 November 2026).**
 
 ---
 
@@ -29,7 +29,7 @@ Week 1 deliverables (from `docs/PLAN.md`): **(a)** fix the permission-diff self-
 
 - Works on the renamed package from commit `1c9924c`: `agentguard` → `mcp_security_auditor`, env prefix `AGENTGUARD_` → `MCP_SECURITY_AUDITOR_`, required Python `>=3.14,<3.15`.
 - Offline mode (`MCP_SECURITY_AUDITOR_OFFLINE=1`) needs no API key and is used for all scanner/permission development and tests.
-- Full suite after the permission fix: **13/13 tests pass offline** (`pytest -q`).
+- Full suite after the permission fix and scanner rules: **17/17 tests pass offline** (`pytest -q`).
 - The three custom tools are deterministic (no LLM), so their behaviour is identical online and offline and is the project's non-LLM baseline.
 
 ---
@@ -40,10 +40,12 @@ Week 1 deliverables (from `docs/PLAN.md`): **(a)** fix the permission-diff self-
 
 Current rule families: hidden-instruction phrases (e.g. `<IMPORTANT>`, "ignore previous instructions", "do not tell the user", "always send"); invisible/zero-width Unicode (category `Cf` and the Unicode-tag block `U+E0000–E007F`); sensitive paths (`~/.ssh`, `id_rsa`, `.env`, `/etc/passwd`, `mcp.json`, `credentials`, `.aws/`); shell/code execution; file-system access; outbound URLs; and broad/wildcard scopes. Severity weights roll up into a capped `risk_score`.
 
-**Planned (Week 1 item b, each with a test):**
-1. Decode base64 / hex blobs in descriptions and re-scan the decoded text.
-2. Detect Unicode homoglyphs in tool **names** (tool shadowing, e.g. `send_emaiI`).
-3. Flag a description that names another tool in the package and issues it instructions (cross-tool shadowing).
+**Added (Week 1 item b), each with a test — reusing existing `FlagKind`s only, so no `schemas.py` contract change:**
+1. **Encoded payloads** (`decode_blobs`). base64/hex blobs in a description are decoded and re-scanned with the injection, sensitive-path and URL patterns. A hit is flagged `hidden_instruction` (CRITICAL) with the **raw blob** as evidence, so the deterministic cleaners (`patcher.py` and `permission_diff.clean_description`) can strip the original blob from the source. A printability guard on the decoded bytes avoids false positives on ordinary base64-looking tokens.
+2. **Homoglyph tool names** (`homoglyph_reason`). A tool name using non-ASCII look-alike characters (e.g. Cyrillic `а`, U+0430) or an uppercase `I`/`O` standing in for a lowercase letter (e.g. `send_emaiI`) is flagged `other` with **HIGH** severity.
+3. **Cross-tool shadowing.** A description that names another tool — one of this package's other snake_case tools, or a known tool from another server (`send_email`, `read_file`, `get_secret`, …) — is flagged `hidden_instruction` (CRITICAL), with the offending sentence fragment as evidence so the cleaners remove it. Matching is restricted to snake_case identifiers to avoid collisions with ordinary English words.
+
+Design choice: `hidden_instruction` for (1) and (3) means the red-team trigger (`has_injection_indicators`), the OWASP mapping (`FLAG_MAP`) and both cleaners pick them up with no change to anyone else's files; more descriptive kinds (`encoded_payload`, `tool_shadowing`) would need a `contract:` PR and are noted for later.
 
 ---
 
@@ -102,15 +104,14 @@ Current set (7 + `labels.json`): `benign_weather` (install), `poisoned_math` (bl
 
 ## 8. Week 2 to-do list (Member B)
 
-1. Three scanner rules (base64/hex decode, homoglyph tool names, cross-tool shadowing), each with a test.
-2. Inspector and Red-Team prompts; run both online against `poisoned_math`.
-3. Sandbox canary refinement + obedience rate over 5 trials; optional defended-manifest run.
-4. Begin growing the sample set toward 20 labelled packages.
+1. Inspector and Red-Team prompts; run both online against `poisoned_math`.
+2. Sandbox canary refinement + obedience rate over 5 trials; optional defended-manifest run.
+3. Begin growing the sample set toward 20 labelled packages — including packages that exercise the three new scanner rules (base64 payload, homoglyph name, cross-tool shadowing).
 
 ## 9. Pending actions
 
-- Open the pull request for `b/permission-diff-fix` (permission-diff fix + 3 regression tests).
-- Confirm with Member A that no contract (`schemas.py`/`state.py`) change is needed — the fix touches only `permission_diff.py` and `tests/test_scanner.py`.
+- PR `b/permission-diff-fix` is open (permission-diff fix + 3 scanner rules + notes, 7 new tests, 17/17 passing) and awaiting review.
+- Confirm with Member A that no contract (`schemas.py`/`state.py`) change is needed — the work touches only `permission_diff.py`, `manifest_scanner.py` and `tests/test_scanner.py`. More descriptive scanner `FlagKind`s would need a `contract:` PR (deferred).
 
 ---
 
