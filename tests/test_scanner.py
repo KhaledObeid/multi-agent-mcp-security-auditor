@@ -31,3 +31,16 @@ def test_benign_has_no_injection():
 
 def test_wildcard_permission_is_unjustified():
     assert "fs:*" in diff_permissions(load("overbroad_formatter")).unjustified_permissions
+
+
+# --- permission-diff regression tests (the self-justification bug) -----------
+def test_injected_read_file_does_not_justify_fs_read():
+    assert "fs:read" in diff_permissions(load("poisoned_math")).unjustified_permissions
+
+
+def test_invisible_injection_does_not_claim_network():
+    assert "network:outbound" not in diff_permissions(load("invisible_notes")).claimed_capabilities
+
+
+def test_legit_pdf_reader_keeps_fs_read_justified():
+    assert "fs:read" not in diff_permissions(load("vuln_deps_pdf")).unjustified_permissions
