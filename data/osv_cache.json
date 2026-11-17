@@ -1,0 +1,57 @@
+{
+  "fetched": "2026-11-15",
+  "source": "https://api.osv.dev/v1/query",
+  "entries": {
+    "PyPI:httpx==0.27.0": {
+      "vuln_ids": [],
+      "summaries": []
+    },
+    "PyPI:pyyaml==5.3": {
+      "vuln_ids": [
+        "CVE-2020-1747",
+        "CVE-2020-14343"
+      ],
+      "summaries": [
+        "Improper Input Validation in PyYAML",
+        "Improper Input Validation in PyYAML"
+      ]
+    },
+    "PyPI:requests==2.19.0": {
+      "vuln_ids": [
+        "CVE-2024-47081",
+        "CVE-2024-35195",
+        "CVE-2026-25645",
+        "CVE-2023-32681",
+        "CVE-2018-18074"
+      ],
+      "summaries": [
+        "Requests vulnerable to .netrc credentials leak via malicious URLs",
+        "Requests `Session` object does not verify requests after making first request with verify=False",
+        "Requests has Insecure Temp File Reuse in its extract_zipped_paths() utility function",
+        "Unintended leak of Proxy-Authorization header in requests",
+        "Insufficiently Protected Credentials in Requests"
+      ]
+    },
+    "PyPI:pillow==8.0.0": {
+      "vuln_ids": [
+        "CVE-2026-112390",
+        "CVE-2026-112391",
+        "CVE-2026-112392",
+        "CVE-2026-112393",
+        "CVE-2023-50447",
+        "CVE-2026-96642",
+        "CVE-2021-27922",
+        "CVE-2024-28219",
+        "CVE-2026-112394",
+        "CVE-2026-55379"
+      ],
+      "summaries": [
+        "Pillow: Infinite loop in MIC n_frames when the embedded TIFF",
+        "Pillow: PdfParser can recurse without limit in get_value() and linearize_page_tree()",
+        "Pillow: NULL dereference in ImagingExpand via rank filters on zero-size images",
+        "Pillow: Heap buffer overflow in _tiffWriteProc when saving TIFF to BytesIO",
+        "Arbitrary Code Execution in Pillow"
+      ]
+    }
+  }
+}

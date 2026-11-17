@@ -1,13 +1,20 @@
 """Tool: vectorized RAG over the security corpus (MANDATORY tool). OWNER: Member C.
 
+Retrieval: plain similarity search by default, with an optional OWASP category
+filter on the per-id flags written by rag/ingest.py. MMR (relevant but mutually
+different chunks) is available via mmr=True but is off: on the 12 labelled
+queries of eval/retrieval_eval.py it halved the correct chunks in the top 4
+(13/48 vs 26/48) and lost one query, because the evidence for a category sits on
+consecutive pages of one chapter, which MMR treats as redundant.
+Every variant costs one embedding request per query.
+
 TODO (Member C):
-  - Try MMR retrieval (search_type="mmr") to avoid near-duplicate chunks.
-  - Add a metadata filter by OWASP id when the analyst asks about one category.
   - Measure retrieval quality: for ~10 hand-written queries, is the right
     category in the top-k? Put the hit rate in the report.
 """
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 
 from mcp_security_auditor.config import settings
@@ -27,10 +34,43 @@ def _store():
     )
 
 
-def search_kb(query: str, k: int = 4) -> list[dict]:
-    """Return [{source, owasp_ids, text}] for the top-k chunks."""
-    docs = _store().similarity_search(query, k=k)
+def cite(meta: dict) -> str:
+    """Citation for one chunk, e.g. 'OWASP-Agentic-Top10-2026.pdf p.24 (ASI05)'."""
+    text = meta.get("source", "?")
+    if meta.get("page"):
+        text += f" p.{meta['page']}"
+    if meta.get("section"):
+        text += f" ({meta['section']})"
+    return text
+
+
+OWASP_CATEGORY = re.compile(r"(ASI|LLM)\d{2}")
+
+
+def search_kb(query: str, k: int = 4, category: str | None = None, mmr: bool = False,
+              fetch_k: int = 20, lambda_mult: float = 0.5) -> list[dict]:
+    """Return [{source, page, section, owasp_ids, cite, text}] for the top-k chunks.
+
+    category: an OWASP id such as "ASI05" restricts the search to chunks tagged with it;
+              anything else (or a category with no chunks) falls back to the whole corpus.
+    mmr:      Maximal Marginal Relevance over the fetch_k most similar chunks (off by default,
+              see the module docstring); lambda_mult trades relevance (1.0) against diversity (0.0).
+    """
+    store = _store()
+    cat = (category or "").strip().upper()
+    filt = {cat: True} if OWASP_CATEGORY.fullmatch(cat) else None
+
+    def run(f):
+        if mmr:
+            return store.max_marginal_relevance_search(query, k=k, fetch_k=fetch_k, lambda_mult=lambda_mult, filter=f)
+        return store.similarity_search(query, k=k, filter=f)
+
+    docs = run(filt) if filt else []
+    if not docs:
+        docs = run(None)
     return [
-        {"source": d.metadata.get("source", "?"), "owasp_ids": d.metadata.get("owasp_ids", ""), "text": d.page_content}
+        {"source": d.metadata.get("source", "?"), "page": d.metadata.get("page"),
+         "section": d.metadata.get("section", ""), "owasp_ids": d.metadata.get("owasp_ids", ""),
+         "cite": cite(d.metadata), "text": d.page_content}
         for d in docs
     ]
