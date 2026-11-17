@@ -1,7 +1,7 @@
 # Member C (Knowledge Track): Reference Notes for the Report
 
 **Author:** Joya Saade (Member C)
-**Period covered:** Week 1 (9–10 November 2026) and Week 2 (12–15 November 2026)
+**Period covered:** Week 1 (9–10 November 2026) and Week 2 (12–17 November 2026)
 **Branches:** `c/rag-corpus` (Week 1, merged as PR #1); `c/week2-retrieval` (Week 2)
 **Report sections fed by these notes:** §5 Tools & RAG, §6 Structured Output, §9 Prompting/Development, §10 Results
 
@@ -33,6 +33,7 @@ Week 1 deliverables (from `docs/PLAN.md`): download the corpus and build Chroma;
 - Embedding model: `models/gemini-embedding-001`, producing 3072-dimensional vectors (verified by embedding a test string).
 - Offline mode (`MCP_SECURITY_AUDITOR_OFFLINE=1`): 10/10 tests pass and the offline audit of `poisoned_math.json` returns `block`.
 - **Week 2 (15 November):** 53/53 tests pass, and the offline evaluation scores 7/7, also on a machine without internet access (OSV cache, §5.2).
+- **17 November:** 59/59 tests pass. Online runs used `gemini-3.5-flash-lite` (free tier: 15 requests/minute, 500/day), selected for the session with `set MCP_SECURITY_AUDITOR_LLM_MODEL=gemini-3.5-flash-lite`; `gemini-3.8-flash` allows only 20 requests/day (Member A's notes, §6b). A full 7-sample run used about 100 requests and took 10–12 minutes.
 
 ---
 
@@ -144,6 +145,28 @@ Result: `vuln_deps_pdf` is now correct offline without network (Member A's notes
 
 **Tests.** `tests/test_threat_analyst.py` (5: dossier keeps all citations, safety net raises and adds, prompts carry rubric, categories, citation and security rules) and `tests/test_osv.py` (5, with a fake OSV: CVE de-duplication as requested in the PR #1 review, online fallback, offline cache use without network calls, cache miss, refresh never writes a partial cache).
 
+### 5.3 Week 2: online validation of the Threat Analyst (17 November)
+
+**Evaluation changes** (`eval/run_eval.py`). For each sample the script now also reports whether the `AuditFindings` structured output validated, how many findings the LLM wrote itself, how many findings carry at least one valid reference (a citation retrieved in that audit, or an OSV id), and how many references are invented. A crashing sample is recorded and the run continues, and results are saved before printing (`eval/results/eval_<model>_<time>.json`). `--only` runs selected samples. This resolves two of Member A's three evaluation issues (fallbacks not recorded; one failure stops the run).
+
+**Runs** (all with `gemini-3.5-flash-lite`):
+
+| Run | SOM validated with findings | Findings by LLM / total | Valid references | Invented | Safety-net corrections | Verdicts |
+|---|---|---|---|---|---|---|
+| A, 16:47 | 5/7 (2 empty lists) | 7/10 | 10/10 | 0 | 4 | 6/7 |
+| B, 17:06 | 6/7 (1 server error) | 7/9 | 9/9 | 0 | 0 | 6/7 |
+| B with `rugpull_calc_v2` rerun, 17:09 | **7/7** | **9/9** | **9/9** | **0** | **0** | 6/7 |
+
+**Week 2 target met:** the `AuditFindings` SOM validates on all 7 samples online, and every reference is a citation retrieved during that audit or an OSV id (none invented). In the final results, Gemini rated the hidden instructions in `poisoned_math` and `rugpull_calc_v2` *critical* itself (Member A's run of 13 November had *high*), which confirms the rubric change of §5.2.
+
+**Findings and fixes during the runs.**
+1. **Empty outputs pass schema validation.** In run A, Flash Lite returned an empty `findings` list for `poisoned_math` and `rugpull_calc_v2`; because the list defaults to empty, the SOM "validated", and only the safety net produced findings. The same sample gave correct critical findings in other runs, so the model is inconsistent rather than the prompt failing. Fix: if the LLM returns no findings although the scanner flagged issues, the analyst asks once more (one extra request); if the answer is still empty, it uses the rule-based findings and records it (`EMPTY` in the evaluation). No empty answers occurred in run B.
+2. **Rule-based findings now carry corpus citations.** A finding added by the safety net or used as a fallback receives up to three citations of its own OWASP chapter retrieved in that audit (never invented).
+3. **Server overload is handled.** In run B, `rugpull_calc_v2` hit `503 UNAVAILABLE` ("model is currently experiencing high demand"); the analyst fell back to the cited rule-based findings and the verdict was still correct. A rerun 3 minutes later validated.
+4. **`benign_weather` (verdict issue, Member A).** In both runs, the analyst reported one *low* finding (ASI02: network access to the weather API, consistent with the stated purpose), with valid citations. The offline run also has one finding there and decides `install`, but the online report agent chose `install_with_mitigations`. This concerns the report agent and policy (§9).
+
+**Limitations.** Seven samples, one model, single runs: Flash Lite varies between runs (run A vs run B), so per-sample results should be read as examples, not rates. Duration per audit was 33–162 s, mostly LLM latency and retries.
+
 ---
 
 ## 6. Code change 2: CVE identifiers in `tools/osv.py` (§5, §10)
@@ -186,10 +209,10 @@ Result: `vuln_deps_pdf` is now correct offline without network (Member A's notes
    **Decision (12 Nov 2026): removed.** Its wording echoed our scanner flags and test queries, so it outranked the OWASP documents (ranked 1st for queries 3–5), would have been cited instead of primary sources, and inflated hit@k. The section-heading tagging (item 1) gives OWASP chunks their own labels, which removes its only advantage. Applied at the 14 November rebuild (342 chunks).
 5. OSV: sort by severity (CVSS), cache responses for offline demos, and use `/v1/querybatch` for many dependencies. **Done (15 Nov): cache; CVSS and querybatch not done, with reasons, §5.2.**
 6. Improve `ANALYST_SYSTEM` and `FINDINGS_SYSTEM` prompts (category definitions, citation of corpus sources). **Done (15 Nov), §5.2.**
-7. **Remaining:** online run of all 7 samples to confirm the Week 2 target ("AuditFindings SOM validates on all 7 samples online; references cite corpus sources or OSV ids"), planned 17–18 November on a fresh flash-lite quota, starting with `poisoned_math` alone; then open the pull request for `c/week2-retrieval`.
-8. **Week 3:** Member A's three evaluation issues in `eval/run_eval.py` (fresh thread per sample, so rug pulls are never exercised; no record of rule-based fallbacks; one failing sample stops the run).
+7. Online run of all 7 samples to confirm the Week 2 target. **Done (17 Nov): target met, §5.3.** Then open the pull request for `c/week2-retrieval`.
+8. Member A's three evaluation issues in `eval/run_eval.py`: fallbacks are now recorded and one failing sample no longer stops the run (**done, 17 Nov, §5.3**). **Week 3:** run rug-pull pairs (v1 then v2) on one shared thread, so rug-pull detection is evaluated.
 
-## 9. Status for teammates (15 November)
+## 9. Status for teammates (updated 17 November)
 
 Week 1 pending actions (push, PR #1, `OwaspCategory` check) are complete. Branch `c/week2-retrieval` touches only Member C's files plus `data/`; `schemas.py` and `state.py` are unchanged. It merges without conflicts into `a/week1-integration` and `a/week2-report` (checked 15 Nov).
 
@@ -199,7 +222,9 @@ Week 1 pending actions (push, PR #1, `OwaspCategory` check) are complete. Branch
 - `state.errors` may now contain notes starting with `analyst safety net:`. They are corrections, not failures, like the report's "raised to policy floor" notes; the evaluation should not count them as errors.
 - `retrieved_sources` entries are now page-level citations (`OWASP-Agentic-Top10-2026.pdf p.22 (ASI05)`) instead of file names. Only the analyst reads them today.
 - Your OSV-offline observation (§9.1 of your notes) is fixed by the cache; offline evaluation is 7/7 without network.
-- Your three evaluation issues are planned for Week 3 (§8, item 8).
+- Two of your three evaluation issues are fixed (§5.3); the shared-thread rug-pull run is planned for Week 3 (§8, item 8).
+- **Verdict on `benign_weather` (17 Nov, both online runs):** the analyst reports one *low* finding (expected network access, with citations) and the online report agent then decides `install_with_mitigations` instead of `install` (offline: `install`). Suggestion for the report prompt or `policy_verdict`: findings that are all *low* or *info* should not by themselves require mitigations. This is the only wrong verdict online (6/7).
+- `state.errors` may also contain `analyst SOM empty, retry succeeded` or `analyst SOM empty twice, using rule-based findings` (§5.3).
 
 **Member B**
 - When you add samples with dependencies (Week 3 target of about 20), run `python -m mcp_security_auditor.tools.osv --refresh` and commit `data/osv_cache.json`; otherwise offline runs look the new dependencies up live.
