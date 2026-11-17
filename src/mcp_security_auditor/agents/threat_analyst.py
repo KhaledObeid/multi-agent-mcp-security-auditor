@@ -252,10 +252,22 @@ def _dossier(state: AuditState) -> str:
     return "\n".join(parts)
 
 
-def apply_safety_net(findings: AuditFindings, baseline: AuditFindings) -> tuple[AuditFindings, list[str]]:
+NET_MAX_REFS = 3  # citations attached to a rule-based finding used in an online audit
+
+
+def _with_chapter_citations(f: Finding, sources: list[str]) -> Finding:
+    """Add the citations of f's own OWASP chapter that this audit's searches retrieved (never invented)."""
+    chapter = [c for c in sources if c.endswith(f"({f.owasp_category.name})") and c not in f.references]
+    return f.model_copy(update={"references": [*f.references, *chapter[:NET_MAX_REFS]]}) if chapter else f
+
+
+def apply_safety_net(findings: AuditFindings, baseline: AuditFindings,
+                     sources: list[str] = ()) -> tuple[AuditFindings, list[str]]:
     """Never let the LLM drop or under-rate a critical deterministic finding.
 
     Matches on (category, tool): a missing critical finding is added back, an under-rated one is raised to critical.
+    A re-added finding also gets the citations of its own chapter that this audit's searches retrieved
+    (sources = state.retrieved_sources, e.g. "... p.13 (ASI02)"), so it is backed by the corpus, never invented.
     Returns the corrected findings and a note per correction (for state.errors, like the report's policy floor).
     """
     out, notes = list(findings.findings), []
@@ -264,7 +276,7 @@ def apply_safety_net(findings: AuditFindings, baseline: AuditFindings) -> tuple[
             continue
         i = next((i for i, f in enumerate(out) if (f.owasp_category, f.affected_tool) == (b.owasp_category, b.affected_tool)), None)
         if i is None:
-            out.append(b)
+            out.append(_with_chapter_citations(b, sources))
             notes.append(f"analyst safety net: added critical finding '{b.title}' ({b.affected_tool})")
         elif out[i].severity != Severity.CRITICAL:
             notes.append(f"analyst safety net: raised '{out[i].title}' ({b.affected_tool}) from {out[i].severity.value} to critical")
@@ -282,14 +294,28 @@ def analyst_findings_node(state: AuditState) -> dict:
     else:
         from mcp_security_auditor.llm import get_llm
 
-        try:
+        def ask() -> AuditFindings:
             raw = get_llm().with_structured_output(AuditFindings).invoke(
                 [SystemMessage(FINDINGS_SYSTEM), HumanMessage(_dossier(state))])
-            findings = raw if isinstance(raw, AuditFindings) else AuditFindings.model_validate(raw)
+            return raw if isinstance(raw, AuditFindings) else AuditFindings.model_validate(raw)
+
+        try:
+            findings = ask()
+            # An empty list is schema-valid (findings defaults to []), so a model that omits it "validates".
+            # When the scanner found something, ask once more before falling back.
+            if not findings.findings and baseline.findings:
+                findings = ask()
+                if findings.findings:
+                    errors.append("analyst SOM empty, retry succeeded")
+                else:
+                    errors.append("analyst SOM empty twice, using rule-based findings")
+                    findings = baseline.model_copy(update={"findings": [
+                        _with_chapter_citations(f, state.retrieved_sources) for f in baseline.findings]})
         except Exception as e:  # parsing / validation failure -> fall back, never crash the audit
             errors.append(f"analyst SOM failed, using rule-based findings: {type(e).__name__}: {e}")
-            findings = baseline
-        findings, notes = apply_safety_net(findings, baseline)
+            findings = baseline.model_copy(update={"findings": [
+                _with_chapter_citations(f, state.retrieved_sources) for f in baseline.findings]})
+        findings, notes = apply_safety_net(findings, baseline, state.retrieved_sources)
         errors += notes
 
     probe = state.model_copy(update={"findings": findings})
