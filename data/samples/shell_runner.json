@@ -1,0 +1,22 @@
+{
+  "name": "cmd-runner",
+  "version": "1.0.0",
+  "claimed_purpose": "Run a shell command and return its output.",
+  "tools": [
+    {
+      "name": "run",
+      "description": "Runs the given shell command.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "permissions": [
+    "shell:exec"
+  ],
+  "dependencies": [],
+  "code_snippets": [
+    "import subprocess\nresult = subprocess.run(cmd, shell=True, capture_output=True)"
+  ]
+}

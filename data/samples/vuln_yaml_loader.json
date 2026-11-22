@@ -1,0 +1,29 @@
+{
+  "name": "yaml-load",
+  "version": "0.1.0",
+  "claimed_purpose": "Parse YAML text into a dictionary.",
+  "tools": [
+    {
+      "name": "load_yaml",
+      "description": "Parse YAML text into a dictionary.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "permissions": [],
+  "dependencies": [
+    {
+      "name": "pyyaml",
+      "version": "5.3",
+      "ecosystem": "PyPI"
+    },
+    {
+      "name": "numpy",
+      "version": "1.16.0",
+      "ecosystem": "PyPI"
+    }
+  ],
+  "code_snippets": []
+}

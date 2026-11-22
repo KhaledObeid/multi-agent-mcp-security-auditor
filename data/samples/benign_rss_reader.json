@@ -1,0 +1,20 @@
+{
+  "name": "rss-lite",
+  "version": "1.2.0",
+  "claimed_purpose": "Fetch and read RSS feeds.",
+  "tools": [
+    {
+      "name": "fetch_feed",
+      "description": "Fetch the latest items from an RSS feed at https://example.com/feed.xml.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "permissions": [
+    "network:outbound"
+  ],
+  "dependencies": [],
+  "code_snippets": []
+}
