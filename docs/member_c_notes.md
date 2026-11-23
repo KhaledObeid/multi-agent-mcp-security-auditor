@@ -1,8 +1,8 @@
 # Member C (Knowledge Track): Reference Notes for the Report
 
 **Author:** Joya Saade (Member C)
-**Period covered:** Week 1 (9–10 November 2026) and Week 2 (12–17 November 2026)
-**Branches:** `c/rag-corpus` (Week 1, merged as PR #1); `c/week2-retrieval` (Week 2)
+**Period covered:** Week 1 (9–10 November 2026), Week 2 (12–17 November 2026) and Week 3 (22 November 2026)
+**Branches:** `c/rag-corpus` (Week 1, merged as PR #1); `c/week2-retrieval` (Week 2, merged as PR #3); `c/week3-eval` (Week 3, pull request opened 22 November)
 **Report sections fed by these notes:** §5 Tools & RAG, §6 Structured Output, §9 Prompting/Development, §10 Results
 
 ---
@@ -167,6 +167,52 @@ Result: `vuln_deps_pdf` is now correct offline without network (Member A's notes
 
 **Limitations.** Seven samples, one model, single runs: Flash Lite varies between runs (run A vs run B), so per-sample results should be read as examples, not rates. Duration per audit was 33–162 s, mostly LLM latency and retries.
 
+### 5.4 Week 3: system-level metrics and rug-pull evaluation (22 November)
+
+**Aim.** Complete the evaluation script so that it produces every quantity that §10 of the report requires (team plan, p. 8: accuracy, block recall, false-block rate, LLM versus baseline, obedience rate), and close the last of Member A's three evaluation issues (rug-pull detection was never evaluated). All changes are confined to `eval/run_eval.py` (commit `2773b60`, branch `c/week3-eval`; 109 lines added, 13 removed). No agent code, `schemas.py` or `state.py` was modified.
+
+**Changes.**
+
+| # | Addition | Definition | Purpose in the report |
+|---|---|---|---|
+| 1 | Block recall | packages labelled `block` that were blocked / packages labelled `block`; a crashed audit counts as a miss | Missed attacks are the most costly error of an auditor |
+| 2 | False-block rate | packages labelled `install` that were blocked / packages labelled `install` | Cost of excessive strictness |
+| 3 | Over-mitigation rate | packages labelled `install` that received `install_with_mitigations` / packages labelled `install` | Captures the milder error observed online on `benign_weather` (§5.3, finding 4) |
+| 4 | Red-team rate and obedience rate | audits that reached the Red-Team agent / all audits; trials in which the mock agent obeyed / trials that ran | Shows that the detected attacks are effective against a naive agent |
+| 5 | LLM calls, tokens and seconds per audit | counted per audit by a LangChain callback handler (`LLMCounter`) passed in the run configuration | Cost of the system on the free tier |
+| 6 | Rug-pull pairs on a shared thread | every `<name>_v1` / `<name>_v2` pair is also audited v1 then v2 on one thread; detected = `rug_pull_detected` on v2 | Evaluates checkpoint-based rug-pull detection |
+
+All metrics are printed below the per-sample table and saved under `"metrics"` (and the pair results under `"pairs"`) in `eval/results/eval_<mode>_<time>.json`.
+
+**Design decisions.**
+1. **False-block rate is computed over packages labelled `install` only.** Blocking a package labelled `install_with_mitigations` is also an error, but it is visible in the confusion matrix; the denominator follows the team plan's wording ("false-block rate on benign ones").
+2. **A crash counts as a miss in block recall.** A malicious package that the system fails to audit has not been blocked; excluding crashes would overstate recall.
+3. **LLM calls are counted through callbacks, not inside the agents.** LangGraph propagates the run's callbacks to every node, so one handler per audit counts all chat-model calls without modifying Member A's or Member B's code. Retries performed inside the Gemini client library are not counted, so the figure is the number of calls issued by the system. Embedding requests made by `search_kb` are not chat-model calls and are not included.
+4. **Obedience is counted per trial.** Member B's sandbox (branch `GhadiAmmar/agents-online`, not yet merged) runs each attack five times and records the result only in the `notes` field (e.g. `"obedience 4/5 (0.80)"`), while `mock_agent_obeyed` is true if any trial obeyed. Counting `mock_agent_obeyed` would therefore report 1/1 for a 4/5 result. The script reads the `k/n` count from `notes` and falls back to `mock_agent_obeyed` (one trial) for results without it; tests that did not run (`None`, e.g. offline) are excluded. Reading a count from text is marked in the code as a shortcut, to be replaced if Member B adds a numeric field through a `contract:` pull request (Member B's TODO in `tools/sandbox.py`).
+5. **Fresh-thread runs serve as the control.** The existing per-sample runs keep one thread per sample, so no audit can see another. In these runs a rug pull must never be reported; the count of such reports is printed as "false detections on fresh threads".
+
+**Verification.**
+- Offline evaluation (`MCP_SECURITY_AUDITOR_OFFLINE=1`, 7 samples), run on the team repository and reproduced on the author's Windows machine:
+
+| Metric | Value |
+|---|---|
+| Accuracy | 1.00 (7/7) |
+| Block recall | 1.0 |
+| False-block rate / over-mitigation rate | 0.0 / 0.0 |
+| Red-team rate | 0.71 (5 of 7 audits) |
+| Obedience rate | not applicable (the sandbox is skipped offline) |
+| LLM calls per audit | 0 (as expected offline) |
+| Rug-pull pairs detected on a shared thread | 1/1 (`rugpull_calc`; v2 verdict `block`) |
+| Rug-pull reports on fresh threads (control) | 0 |
+
+- Test suite: 66 passed offline (unchanged).
+- Metric functions checked with hand-made rows of known outcome (two `block` samples with one blocked gives recall 0.5; red-team trials 4/5 and 1/5 give an obedience rate of 0.5 over 10 trials; notes without a count and skipped tests handled as specified).
+- Callback counting checked with a fake chat model called inside a LangGraph node without an explicit configuration: 2 calls and 7 tokens counted, as expected. The first online run (`--only poisoned_math`) will confirm the count against Gemini.
+
+**Expected online cost.** With about 20 samples and two rug-pull pairs, a full online evaluation is about 24 audits, i.e. roughly 200–360 LLM calls at 8–15 calls per audit (team plan, p. 6). This exceeds the daily free-tier limit of `gemini-3.8-flash` (about 20 requests; Member A's README), so the evaluation must use `gemini-3.5-flash-lite`, whose current daily limit should be checked at ai.dev/rate-limit before the run.
+
+**Limitations.** The new metrics were exercised offline only, where no LLM call and no sandbox test occur; their online values depend on Member B's samples and sandbox being merged. With 7 labelled samples, each rate rests on two or three packages.
+
 ---
 
 ## 6. Code change 2: CVE identifiers in `tools/osv.py` (§5, §10)
@@ -200,7 +246,7 @@ Result: `vuln_deps_pdf` is now correct offline without network (Member A's notes
 
 ---
 
-## 8. Week 2 to-do list (Member C)
+## 8. Week 2 and Week 3 to-do list (Member C)
 
 1. Section-heading tagging of chunks (fixes W1); store per-id boolean metadata to enable filtering. **Done (14 Nov), §5.1.**
 2. MMR retrieval and an optional OWASP-category filter in `search_kb` (addresses W2). **Done (14 Nov): filter adopted; MMR measured and left off by default, §5.1.**
@@ -210,9 +256,23 @@ Result: `vuln_deps_pdf` is now correct offline without network (Member A's notes
 5. OSV: sort by severity (CVSS), cache responses for offline demos, and use `/v1/querybatch` for many dependencies. **Done (15 Nov): cache; CVSS and querybatch not done, with reasons, §5.2.**
 6. Improve `ANALYST_SYSTEM` and `FINDINGS_SYSTEM` prompts (category definitions, citation of corpus sources). **Done (15 Nov), §5.2.**
 7. Online run of all 7 samples to confirm the Week 2 target. **Done (17 Nov): target met, §5.3.** Then open the pull request for `c/week2-retrieval`.
-8. Member A's three evaluation issues in `eval/run_eval.py`: fallbacks are now recorded and one failing sample no longer stops the run (**done, 17 Nov, §5.3**). **Week 3:** run rug-pull pairs (v1 then v2) on one shared thread, so rug-pull detection is evaluated.
+8. Member A's three evaluation issues in `eval/run_eval.py`: fallbacks are now recorded and one failing sample no longer stops the run (**done, 17 Nov, §5.3**). **Week 3:** run rug-pull pairs (v1 then v2) on one shared thread, so rug-pull detection is evaluated. **Done (22 Nov), §5.4.**
 
-## 9. Status for teammates (updated 17 November)
+**Week 3 (Member C)**
+
+9. Evaluation metrics required by §10 (block recall, false-block rate, obedience rate, LLM cost). **Done (22 Nov), §5.4.**
+10. Final evaluation tables (offline baseline and LLM, about 20 samples), saved in `eval/results`. **Waiting** for Member B's samples and for Member A's and Member B's Week 2 branches to be merged into `main`.
+11. Report sections: compile §5 (RAG and OSV part), write §6 Structured Output and §10 Results. Full draft due 29 November.
+
+## 9. Status for teammates (updated 22 November)
+
+**Week 3 (22 November).** Pull request `c/week3-eval` changes only `eval/run_eval.py` (§5.4) and these notes; no contract change.
+- **Member A and Member B: definition of "obeyed".** `policy_verdict()` blocks when `mock_agent_obeyed` is true in any red-team result, and Member B's sandbox sets it true when at least one of five trials obeyed. This decides how many packages are blocked and is open item 3 of Member A's Week 2 list; it should be agreed before the final evaluation. The evaluation already reports the per-trial rate either way.
+- **Member B.** The obedience rate is read from the `"obedience k/n"` note. If a numeric field (e.g. `obeyed_count`, `trials`) is added through a `contract:` pull request, please tell Member C so that the evaluation reads it instead. New rug-pull samples are evaluated automatically when named `<name>_v1.json` / `<name>_v2.json`.
+- **Member A.** `eval/results/` is listed in `.gitignore`, while the Week 3 definition of done asks for the evaluation tables to be saved there. To decide: commit the final result files (e.g. with `git add -f`) or report them only in the paper.
+- **Everyone.** The final online evaluation requires the merged Week 2 branches and about 20 samples on `main`; it costs about 200–360 LLM calls (§5.4) and should be run with `gemini-3.5-flash-lite`, once, and not on the day the video is recorded.
+
+**Week 2 (17 November)**
 
 Week 1 pending actions (push, PR #1, `OwaspCategory` check) are complete. Branch `c/week2-retrieval` touches only Member C's files plus `data/`; `schemas.py` and `state.py` are unchanged. It merges without conflicts into `a/week1-integration` and `a/week2-report` (checked 15 Nov).
 

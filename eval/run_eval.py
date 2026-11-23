@@ -24,16 +24,25 @@ Per sample it also checks the Threat Analyst (week 2 target):
 A sample that crashes (e.g. quota exhausted) is recorded and the run continues.
 Results are saved to eval/results/eval_<mode>_<time>.json.
 
+Summary metrics (also saved under "metrics"):
+  block recall        packages labelled block that were blocked (a crash counts as a miss)
+  false-block rate    packages labelled install that were blocked
+  over-mitigation     packages labelled install that got install_with_mitigations
+  red-team rate       audits that reached the Red-Team agent
+  obedience rate      trials where the mock agent obeyed / trials that ran (skipped tests excluded)
+  LLM calls, tokens   per audit, counted by a callback (0 offline; SDK-internal retries not counted)
+  rug-pull detection  each <name>_v1/<name>_v2 pair also runs v1 then v2 on ONE shared thread;
+                      detected = rug_pull_detected on v2. The fresh-thread runs above are the
+                      control and must never report a rug pull.
+
 TODO (Member C):
   - Grow the labelled set to ~20 packages (Member B writes new samples).
-  - Add metrics: block recall (did we catch every malicious package?),
-    false-block rate on benign ones, red-team obedience rate, avg LLM calls/latency.
-  - Run rug-pull pairs (v1 then v2) on one shared thread so rug-pull detection is evaluated.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from collections import Counter
@@ -41,6 +50,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+
+from langchain_core.callbacks import BaseCallbackHandler  # noqa: E402
 
 from mcp_security_auditor.config import settings  # noqa: E402
 from mcp_security_auditor.graph import build_graph  # noqa: E402
@@ -82,17 +93,90 @@ def analyst_check(out: dict) -> dict:
     }
 
 
-def run_one(graph, name: str) -> dict:
+class LLMCounter(BaseCallbackHandler):
+    """Counts chat-model calls and tokens; the graph passes run callbacks down to every node's LLM."""
+
+    def __init__(self) -> None:
+        self.calls = self.tokens = 0
+
+    def on_chat_model_start(self, *args, **kwargs) -> None:
+        self.calls += 1
+
+    def on_llm_end(self, response, **kwargs) -> None:
+        for gens in response.generations:
+            for g in gens:
+                usage = getattr(getattr(g, "message", None), "usage_metadata", None) or {}
+                self.tokens += usage.get("total_tokens", 0)
+
+
+def obedience(r) -> list[int] | None:
+    """[obeyed, trials] for one red-team test; None if it did not run."""
+    # shortcut: B's sandbox puts the per-trial count only in notes ("obedience 4/5"); read a numeric field if B adds one
+    m = re.search(r"obedience (\d+)/(\d+)", r.notes)
+    if m:
+        return [int(m[1]), int(m[2])]
+    return None if r.mock_agent_obeyed is None else [int(r.mock_agent_obeyed), 1]
+
+
+def run_one(graph, name: str, thread: str | None = None) -> dict:
     pkg = load_package(str(SAMPLES / f"{name}.json"))
+    counter = LLMCounter()
     t0 = time.time()
     try:
-        out = graph.invoke({"package": pkg}, {"configurable": {"thread_id": f"eval-{name}"}})
-        row = {"verdict": out["final_report"].verdict.value, "red_team": bool(out.get("red_team_results")),
-               **analyst_check(out)}
+        out = graph.invoke({"package": pkg}, {"configurable": {"thread_id": thread or f"eval-{name}"},
+                                              "callbacks": [counter]})
+        results = out.get("red_team_results", [])
+        row = {"verdict": out["final_report"].verdict.value, "red_team": bool(results),
+               "obeyed": [obedience(r) for r in results],
+               "rug_pull": bool(out.get("rug_pull_detected")), **analyst_check(out)}
     except Exception as e:  # one failing sample must not stop (and waste) the whole run
         row = {"verdict": "ERROR", "red_team": False, "crash": f"{type(e).__name__}: {str(e)[:300]}"}
-    row["secs"] = round(time.time() - t0, 1)
+    row.update(secs=round(time.time() - t0, 1), llm_calls=counter.calls, tokens=counter.tokens)
     return row
+
+
+def run_pairs(graph, names) -> dict:
+    """v1 then v2 on one shared thread, so intake can compare v2 with the approved v1."""
+    pairs = {}
+    for base in sorted(n[:-3] for n in names if n.endswith("_v1") and f"{n[:-3]}_v2" in names):
+        print(f"auditing {base}_v1 -> {base}_v2 on one thread ...", flush=True)
+        first = run_one(graph, f"{base}_v1", f"eval-pair-{base}")
+        second = run_one(graph, f"{base}_v2", f"eval-pair-{base}")
+        pairs[base] = {"detected": second.get("rug_pull", False), "v2_verdict": second["verdict"],
+                       "crash": first.get("crash") or second.get("crash"),
+                       "secs": first["secs"] + second["secs"],
+                       "llm_calls": first["llm_calls"] + second["llm_calls"],
+                       "tokens": first["tokens"] + second["tokens"]}
+    return pairs
+
+
+def summarize(rows: dict, pairs: dict) -> dict:
+    vals = list(rows.values())
+
+    def rate(expected: str | None, hit) -> float | None:
+        sel = [r for r in vals if expected is None or r["expected"] == expected]
+        return round(sum(map(hit, sel)) / len(sel), 2) if sel else None
+
+    tests = [o for r in vals for o in r.get("obeyed", []) if o is not None]
+    obeyed, trials = sum(o[0] for o in tests), sum(o[1] for o in tests)
+    avg = lambda k: round(sum(r[k] for r in vals) / len(vals), 1)  # noqa: E731
+    return {
+        "samples": len(vals),
+        "accuracy": rate(None, lambda r: r["verdict"] == r["expected"]),
+        "block_recall": rate("block", lambda r: r["verdict"] == "block"),
+        "false_block_rate": rate("install", lambda r: r["verdict"] == "block"),
+        "over_mitigation_rate": rate("install", lambda r: r["verdict"] == "install_with_mitigations"),
+        "red_team_rate": rate(None, lambda r: r["red_team"]),
+        "obedience_rate": round(obeyed / trials, 2) if trials else None,
+        "obedience_tests": len(tests),
+        "obedience_trials": trials,
+        "avg_llm_calls": avg("llm_calls"),
+        "avg_tokens": avg("tokens"),
+        "avg_secs": avg("secs"),
+        "rug_pull_pairs": len(pairs),
+        "rug_pull_detected": sum(p["detected"] for p in pairs.values()),
+        "control_false_rug_pulls": sum(r.get("rug_pull", False) for r in vals),
+    }
 
 
 def main() -> None:
@@ -112,18 +196,30 @@ def main() -> None:
         print(f"auditing {name} ...", flush=True)
         rows[name] = {"expected": expected, **run_one(graph, name)}
         confusion[(expected, rows[name]["verdict"])] += 1
+    pairs = run_pairs(graph, labels)
+    metrics = summarize(rows, pairs)
 
     mode = "OFFLINE baseline" if settings.offline else f"LLM ({settings.llm_model})"
     print(f"\nMode: {mode}")
-    print(f"{'sample':22} {'expected':25} {'got':25} {'SOM':8} {'by LLM':6} {'cited':6} {'invented':8} {'net':3} secs")
+    print(f"{'sample':22} {'expected':25} {'got':25} {'SOM':8} {'by LLM':6} {'cited':6} {'invented':8} {'net':3} "
+          f"{'calls':5} secs")
     for name, r in rows.items():
         mark = "" if r["expected"] == r["verdict"] else "  <-- wrong"
         cited = f"{r['cited']}/{r['findings']}" if "findings" in r else "-"
         print(f"{name:22} {r['expected']:25} {r['verdict']:25} {r.get('som', '-'):8} {r.get('by_llm', '-')!s:6} {cited:6} "
-              f"{len(r.get('invented', [])):<8} {len(r.get('net', [])):<3} {r['secs']}{mark}")
-    acc = sum(r["expected"] == r["verdict"] for r in rows.values()) / len(rows)
-    print(f"\naccuracy = {acc:.2f} on {len(rows)} samples")
+              f"{len(r.get('invented', [])):<8} {len(r.get('net', [])):<3} {r['llm_calls']:<5} {r['secs']}{mark}")
+    m = metrics
+    print(f"\naccuracy = {m['accuracy']:.2f} on {m['samples']} samples")
     print("confusion (expected -> got):", dict(confusion))
+    print(f"block recall = {m['block_recall']}, false-block rate = {m['false_block_rate']}, "
+          f"over-mitigation rate = {m['over_mitigation_rate']} (None = no sample with that label)")
+    print(f"red team ran on {m['red_team_rate']} of audits; obedience rate = {m['obedience_rate']} "
+          f"over {m['obedience_trials']} trials in {m['obedience_tests']} sandbox tests")
+    print(f"per audit: {m['avg_llm_calls']} LLM calls, {m['avg_tokens']} tokens, {m['avg_secs']} s")
+    print(f"rug pull: detected {m['rug_pull_detected']}/{m['rug_pull_pairs']} pairs on a shared thread, "
+          f"{m['control_false_rug_pulls']} false detections on fresh threads (should be 0)")
+    for base, p in pairs.items():
+        print(f"  {base}: detected={p['detected']}, v2 verdict={p['v2_verdict']}" + (f", crash: {p['crash']}" if p["crash"] else ""))
     done = [r for r in rows.values() if "findings" in r]
     if done and not settings.offline:
         tot = lambda k: sum(r[k] for r in done)  # noqa: E731
@@ -135,7 +231,7 @@ def main() -> None:
     RESULTS.mkdir(exist_ok=True)
     tag = "offline" if settings.offline else settings.llm_model
     path = RESULTS / f"eval_{tag}_{time.strftime('%Y%m%d_%H%M%S')}.json"
-    path.write_text(json.dumps({"mode": mode, "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(json.dumps({"mode": mode, "metrics": metrics, "pairs": pairs, "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
 
     details = []
     for n, r in rows.items():
