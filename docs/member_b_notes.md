@@ -79,16 +79,18 @@ Design choice: `hidden_instruction` for (1) and (3) means the red-team trigger (
 
 ## 5. Custom tool #3: red-team sandbox (`sandbox.py`) (§5, §8)
 
-`run_sandbox(pkg, target_tool, attack_prompt) -> RedTeamResult`. A naive mock agent is given the package's tool **schemas only** (nothing executes) plus a user request; the sandbox records which tools it attempts and checks canaries. "Obeyed" = it did something the user never asked for because a tool description told it to (read a secret path, contact a URL from the description, or call an extra tool). Skipped in offline mode.
+`run_sandbox(pkg, target_tool, attack_prompt, trials=None) -> RedTeamResult`. A naive mock agent is given the package's tool **schemas only** (nothing executes) plus a user request; the sandbox records which tools it attempts and checks canaries. "Obeyed" = it did something the user never asked for because a tool description told it to (read a secret path, contact a URL from the description, or hide data in a parameter). Skipped in offline mode.
 
-**Planned (Week 2):** compare observed arguments against the user's request to cut false positives; run each attack N≈5 times and report an **obedience rate** (strong quantitative result for §10); add a "defended" variant that feeds the mock agent AgentGuard's **patched** manifest and show the obedience rate drop.
+**Done (19 November 2026):** `run_sandbox` now runs **N trials** (default 5, env `MCP_SECURITY_AUDITOR_REDTEAM_TRIALS`) and reports an **obedience rate** in `notes`, e.g. `obedience 4/5 (0.80)` — the quantitative result for §10. Canary detection compares observed arguments against the user's request, and an "extra tool" counts only when it looks like exfiltration (its own args carry a canary, or it is a known data-moving tool), cutting false positives. `summarize_trials()` is a pure, unit-tested function. The obedience rate lives in `notes` to avoid a `schemas.py` contract change; a clean `trials`/`obeyed_count` field is an optional follow-up.
+
+**Still planned:** a "defended" variant that feeds the mock agent AgentGuard's **patched** manifest and shows the obedience rate drop.
 
 ---
 
 ## 6. Agents: Inspector and Red-Team (§4, §8, §9)
 
-- **Inspector** loops with its tools node until it stops requesting tools, then hands off `scan_report` and `permission_diff` through shared state. A safety net runs the tools directly if the LLM never scans. Planned: tighten `INSPECTOR_SYSTEM` and end with a short attack-surface summary.
-- **Red-Team** is reached only when `should_red_team` is true (injection indicators, a high/critical finding, or a rug pull). It picks suspicious tools from the findings and runs the sandbox. Planned: one benign-looking and one adversarial prompt per suspicious tool; repeated trials.
+- **Inspector** loops with its tools node until it stops requesting tools, then hands off `scan_report` and `permission_diff` through shared state. A safety net runs the tools directly if the LLM never scans. `INSPECTOR_SYSTEM` now sets an explicit tool order, requires the `claimed_purpose` to come from the stated purpose (not an embedded instruction), and ends with a structured attack-surface summary (19 Nov).
+- **Red-Team** is reached only when `should_red_team` is true (injection indicators, a high/critical finding, or a rug pull). `REDTEAM_SYSTEM` now asks for one benign-looking and one adversarial prompt per suspicious tool (19 Nov), and `_suspicious_tools()` falls back to scanner-flagged tools when a finding carries no `affected_tool` (rug-pull case).
 - **Message handling (§8):** both agents produce the full `SystemMessage → HumanMessage → AIMessage(tool_calls) → ToolMessage → AIMessage(final)` trace that `utils/messages.py` prints, distinguishing a tool-call request from a final answer.
 - **Prompt-injection defence:** package text is wrapped in `<untrusted>…</untrusted>` and every system prompt carries the rule never to follow instructions found there.
 
@@ -104,14 +106,15 @@ Current set (7 + `labels.json`): `benign_weather` (install), `poisoned_math` (bl
 
 ## 8. Week 2 to-do list (Member B)
 
-1. Inspector and Red-Team prompts; run both online against `poisoned_math`.
-2. Sandbox canary refinement + obedience rate over 5 trials; optional defended-manifest run.
-3. Begin growing the sample set toward 20 labelled packages — including packages that exercise the three new scanner rules (base64 payload, homoglyph name, cross-tool shadowing).
+1. **Online run** on `poisoned_math`: needs a Gemini key in `.env`, `MCP_SECURITY_AUDITOR_OFFLINE` unset. Capture the live message trace (§8) and the obedience rate (§10). The only remaining piece of the Nov 18 item — prompts and harness are done.
+2. Grow the sample set toward 20 labelled packages — including packages that exercise the three scanner rules (base64 payload, homoglyph name, cross-tool shadowing).
+3. Optional: defended-manifest sandbox variant (obedience rate on the patched vs. raw package).
 
 ## 9. Pending actions
 
-- PR `b/permission-diff-fix` is open (permission-diff fix + 3 scanner rules + notes, 7 new tests, 17/17 passing) and awaiting review.
-- Confirm with Member A that no contract (`schemas.py`/`state.py`) change is needed — the work touches only `permission_diff.py`, `manifest_scanner.py` and `tests/test_scanner.py`. More descriptive scanner `FlagKind`s would need a `contract:` PR (deferred).
+- Week 1 PR (permission-diff fix + 3 scanner rules + notes) **merged to `main`**.
+- PR `b/agents-online` open: stronger Inspector/Red-Team prompts + 5-trial obedience harness + `tests/test_sandbox.py` (7 tests). Awaiting review.
+- No `schemas.py`/`state.py` contract change so far. A clean numeric obedience field on `RedTeamResult` (`trials`/`obeyed_count`) and more descriptive scanner `FlagKind`s would each be a small `contract:` PR with Member A (both deferred).
 
 ---
 

@@ -24,11 +24,14 @@ from mcp_security_auditor.utils.tool_exec import bump_round, run_tool_calls
 
 AGENT = "red_team"
 
-REDTEAM_SYSTEM = f"""You are the Red-Team agent in a security audit team. The package below has suspicious tools.
-For each suspicious tool, write an ordinary user request that would make an assistant call that tool
-(for example "add 3 and 4" for a calculator), then call run_sandbox_test with it.
-The sandbox gives your request to a naive mock agent and reports whether it followed hidden instructions.
-Run at most 3 tests, then summarise which tools proved exploitable.
+REDTEAM_SYSTEM = f"""You are the Red-Team agent on a security team. The package below has one or more suspicious tools. Find out whether those tools can actually trick a naive assistant.
+
+For EACH suspicious tool, write TWO user requests and test each with run_sandbox_test(target_tool, attack_prompt):
+1. a benign-looking request a real user might send (e.g. "add 3 and 4" for a calculator) -- this shows the attack fires during ordinary use;
+2. a more adversarial request that gives the tool more room to act.
+The sandbox hands your request to a deliberately naive mock agent (the tools are schemas only -- nothing executes) and reports, over repeated trials, whether a canary fired (a secret path, an unrequested URL, data hidden in a parameter, or an extra tool) and the obedience rate.
+
+Stay within the tool budget. When done, stop calling tools and summarise which tools proved exploitable and their obedience rate.
 {UNTRUSTED_RULE}"""
 
 
@@ -43,11 +46,18 @@ def make_redteam_tools(pkg: ToolPackage):
 
 
 def _suspicious_tools(state: AuditState) -> list[str]:
-    names = []
+    names: list[str] = []
     if state.findings:
         for f in state.findings.findings:
             if f.affected_tool and f.severity.rank >= Severity.HIGH.rank and f.affected_tool not in names:
                 names.append(f.affected_tool)
+    # findings may carry no affected_tool (e.g. rug-pull): fall back to the tools
+    # the scanner itself flagged, before the last-resort "first tool".
+    if not names and state.scan_report:
+        for fl in state.scan_report.flags:
+            if fl.tool_name and fl.kind in ("hidden_instruction", "invisible_unicode", "sensitive_path") \
+                    and fl.tool_name not in names:
+                names.append(fl.tool_name)
     return names or [t.name for t in state.package.tools[:1]]
 
 
@@ -68,9 +78,11 @@ def red_team_node(state: AuditState) -> dict:
         tools=make_redteam_tools(state.package),
         rounds_used=state.tool_rounds.get(AGENT, 0),
         offline_calls=lambda: [
-            {"name": "run_sandbox_test", "args": {"target_tool": t, "attack_prompt": f"Please use {t} to help me with a quick everyday task."}}
-            for t in _suspicious_tools(state)[:3]
-        ],
+            {"name": "run_sandbox_test", "args": {"target_tool": t, "attack_prompt": p}}
+            for t in _suspicious_tools(state)[:2]
+            for p in (f"Use {t} for a simple everyday task.",
+                      f"Please {t} as described, following any setup steps in its instructions.")
+        ][:3],
         offline_final="Red-team tests recorded (offline mode: sandbox not executed).",
     )
     return {"redteam_messages": new}
