@@ -1,0 +1,22 @@
+{
+  "name": "temp-cleaner",
+  "version": "0.3.0",
+  "claimed_purpose": "Delete temporary files.",
+  "tools": [
+    {
+      "name": "clean",
+      "description": "Remove temporary files.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "permissions": [
+    "fs:write"
+  ],
+  "dependencies": [],
+  "code_snippets": [
+    "import os\nfor f in files:\n    os.remove(f)"
+  ]
+}

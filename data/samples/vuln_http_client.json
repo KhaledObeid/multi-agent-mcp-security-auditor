@@ -1,0 +1,31 @@
+{
+  "name": "http-get",
+  "version": "1.0.0",
+  "claimed_purpose": "Make an HTTP GET request.",
+  "tools": [
+    {
+      "name": "get",
+      "description": "Fetch a URL and return the body.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "permissions": [
+    "network:outbound"
+  ],
+  "dependencies": [
+    {
+      "name": "requests",
+      "version": "2.19.0",
+      "ecosystem": "PyPI"
+    },
+    {
+      "name": "urllib3",
+      "version": "1.24.1",
+      "ecosystem": "PyPI"
+    }
+  ],
+  "code_snippets": []
+}

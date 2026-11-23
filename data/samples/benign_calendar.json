@@ -1,0 +1,18 @@
+{
+  "name": "calendar-lite",
+  "version": "1.0.0",
+  "claimed_purpose": "Show your upcoming calendar events.",
+  "tools": [
+    {
+      "name": "list_events",
+      "description": "Return the next few events on the calendar.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "permissions": [],
+  "dependencies": [],
+  "code_snippets": []
+}
