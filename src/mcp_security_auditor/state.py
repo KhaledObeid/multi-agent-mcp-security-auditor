@@ -11,11 +11,13 @@ Design notes for the report (State Design section):
 - Optional fields are None until the node that owns them runs.
 - audit_history uses an append reducer and is NEVER reset, so with MemorySaver
   a second audit on the same thread_id can detect a rug pull.
+- chat_messages and user_expertise (Report chat) are also never reset by intake,
+  so the conversation and the user's chosen style carry across audits on a thread.
 """
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
@@ -73,6 +75,12 @@ class AuditState(BaseModel):
     policy_reason: str = ""
     patched_manifest: Optional[dict] = None
     patch_changes: list[str] = Field(default_factory=list)
+
+    # ---- Report chat (Member A; contract PR of Nov 24, 2026) ----------------
+    # The user-facing conversation about the audit. Never reset by intake.
+    chat_messages: Annotated[list[AnyMessage], add_messages] = Field(default_factory=list)
+    # "plain" (default) or "technical" (OWASP ids, CVE ids, scanner rule names, permission scopes)
+    user_expertise: Literal["plain", "technical"] = "plain"
 
     # ---- control / safety -------------------------------------------------
     tool_rounds: dict[str, int] = Field(default_factory=dict)  # agent -> tool loops used

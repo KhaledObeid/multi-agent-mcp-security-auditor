@@ -195,3 +195,18 @@ class AuditRecord(BaseModel):
     # description identical but asks for new permissions or pulls in a new dependency
     permissions: list[str] = Field(default_factory=list)
     dependencies: list[str] = Field(default_factory=list)  # dependency names
+
+
+# --------------------------------------------------------------------------- #
+# Report chat -- STRUCTURED OUTPUT MODE target of the user-facing chat
+# (added Nov 24, 2026 by "contract: add chat state and ChatReply schema")
+# --------------------------------------------------------------------------- #
+class ChatReply(BaseModel):
+    """One answer of the Report chat. The code, not the model, decides what is
+    printed: when in_scope is False it prints a fixed refusal, never `answer`."""
+    in_scope: bool = Field(description="True only if the message is about the audited package, its findings or "
+                                       "verdict, MCP/agent-tool security as it applies to this audit, or how to "
+                                       "use the auditor")
+    answer: str = Field(description="The reply to the user, using only facts from the audit data")
+    refusal_reason: Optional[str] = Field(default=None, description="Set when the request must be refused "
+                                          "(out of scope or sensitive), otherwise null")

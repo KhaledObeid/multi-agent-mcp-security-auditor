@@ -1,5 +1,9 @@
 """Contract freeze guard (frozen end of week 1, Nov 11 2026). OWNER: Member A.
 
+Contract changes since the freeze:
+  - Nov 24, 2026 "contract: add chat state and ChatReply schema": ChatReply, and
+    AuditState.chat_messages / AuditState.user_expertise (all additive).
+
 schemas.py and state.py are shared by every agent. After the freeze:
   - existing fields and enum values may NOT be removed or renamed,
   - new fields are allowed only if they have a default (Optional / default value),
@@ -26,13 +30,14 @@ FROZEN_FIELDS = {
     "RedTeamResult": ["target_tool", "attack_prompt", "mock_agent_obeyed", "observed_tool_calls", "canary_hits",
                       "notes"],
     "FinalReport": ["verdict", "rationale", "required_mitigations"],
+    "ChatReply": ["in_scope", "answer", "refusal_reason"],
     "AuditRecord": ["package_name", "package_version", "manifest_hash", "tool_hashes", "verdict", "permissions",
                     "dependencies"],
     "AuditState": ["package", "run_count", "manifest_hash", "tool_hashes", "audit_history", "rug_pull_detected",
                    "rug_pull_changes", "inspector_messages", "analyst_messages", "redteam_messages", "scan_report",
                    "permission_diff", "dependency_vulns", "retrieved_sources", "findings", "needs_red_team",
                    "red_team_results", "final_report", "policy_floor", "policy_reason", "patched_manifest",
-                   "patch_changes", "tool_rounds", "errors"],
+                   "patch_changes", "chat_messages", "user_expertise", "tool_rounds", "errors"],
 }
 
 FROZEN_ENUMS = {
