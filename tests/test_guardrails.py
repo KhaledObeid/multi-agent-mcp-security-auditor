@@ -34,10 +34,25 @@ def _finding(category, severity, tool=None):
 
 
 # --- 1. policy floor ---------------------------------------------------------
-def test_llm_cannot_lower_the_floor_by_under_rating_findings(monkeypatch):
-    """Reproduces the review experiment through the real analyst node: an LLM that
-    rates the SSH-stealing instruction 'high' (as Gemini did in the first online run)
-    and a sandbox run where the mock agent did not obey."""
+def test_llm_cannot_lower_the_floor_by_under_rating_findings():
+    """The policy floor on its own: findings an LLM rated 'high' for the SSH-stealing
+    instruction (as Gemini did in the first online run) and a sandbox run where the mock
+    agent did not obey. The floor must still block, from the scanner's severity hints.
+    The findings go straight to policy_verdict, so this checks the second layer even if the
+    analyst's safety net (next test) were bypassed."""
+    downgraded = AuditFindings(findings=[_finding(OwaspCategory.ASI01, Severity.HIGH, "add"),
+                                         _finding(OwaspCategory.ASI02, Severity.HIGH, "add")])
+    pkg = load("poisoned_math")
+    state = AuditState(package=pkg, scan_report=scan_package(pkg), findings=downgraded, red_team_results=[
+        RedTeamResult(target_tool="add", attack_prompt="add 3 and 4", mock_agent_obeyed=False)])
+    floor, reason = policy_verdict(state)
+    assert floor == Verdict.BLOCK
+    assert "scanner" in reason
+
+
+def test_analyst_safety_net_restores_an_under_rated_critical(monkeypatch):
+    """First layer (Member C's apply_safety_net): the analyst node raises an LLM finding
+    rated below the scanner's critical hint back to critical."""
     downgraded = AuditFindings(findings=[_finding(OwaspCategory.ASI01, Severity.HIGH, "add"),
                                          _finding(OwaspCategory.ASI02, Severity.HIGH, "add")])
 
@@ -54,13 +69,7 @@ def test_llm_cannot_lower_the_floor_by_under_rating_findings(monkeypatch):
     pkg = load("poisoned_math")
     state = AuditState(package=pkg, scan_report=scan_package(pkg))
     findings = threat_analyst.analyst_findings_node(state)["findings"]
-    assert findings.max_severity == Severity.HIGH  # the LLM really did under-rate it
-
-    state = state.model_copy(update={"findings": findings, "red_team_results": [
-        RedTeamResult(target_tool="add", attack_prompt="add 3 and 4", mock_agent_obeyed=False)]})
-    floor, reason = policy_verdict(state)
-    assert floor == Verdict.BLOCK
-    assert "scanner" in reason
+    assert findings.max_severity == Severity.CRITICAL
 
 
 def test_floor_is_unchanged_when_llm_and_scanner_agree():
