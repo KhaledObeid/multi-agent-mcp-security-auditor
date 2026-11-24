@@ -3,7 +3,7 @@
 Free public API, no key needed. Docs: https://google.github.io/osv.dev/api/
 POST https://api.osv.dev/v1/query with {"package": {...}, "version": "..."}.
 
-Cache (data/osv_cache.json): saved OSV answers for the dependencies of data/samples, so
+Cache (data/osv_cache.json): saved OSV answers for the dependencies of data/samples and data/holdout, so
 audits do not depend on the network.
   online mode   live lookup first; the cache only if the lookup fails
   offline mode  cache first; a live lookup only for a dependency the cache does not hold
@@ -78,11 +78,15 @@ def query_osv_one(name: str, version: str, ecosystem: str = "PyPI") -> Dependenc
     return live
 
 
-def refresh_cache(samples_dir: Path = ROOT / "data" / "samples", path: Path | None = None) -> dict:
-    """Query OSV live for every dependency of every sample and rewrite the cache file."""
+SAMPLE_DIRS = (ROOT / "data" / "samples", ROOT / "data" / "holdout")
+
+
+def refresh_cache(samples_dir: Path | tuple[Path, ...] = SAMPLE_DIRS, path: Path | None = None) -> dict:
+    """Query OSV live for every dependency of every sample (all folders) and rewrite the cache file."""
     path = path or CACHE_PATH
+    dirs = (samples_dir,) if isinstance(samples_dir, Path) else samples_dir
     entries, failed = {}, []
-    for p in sorted(samples_dir.glob("*.json")):
+    for p in sorted(f for d in dirs for f in d.glob("*.json")):
         if p.name == "labels.json":
             continue
         for d in ToolPackage.model_validate_json(p.read_text(encoding="utf-8")).dependencies:

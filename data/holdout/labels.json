@@ -7,5 +7,9 @@
   "cyrillic_keywords": "block",
   "ssh_config_helper": "install_with_mitigations",
   "callout_formatter": "install",
-  "env_example_writer": "install"
+  "env_example_writer": "install",
+  "word_define": "install",
+  "repo_helper": "install_with_mitigations",
+  "cal_assistant": "install_with_mitigations",
+  "pdf_extract": "block"
 }
