@@ -1,0 +1,21 @@
+{
+  "name": "doc-search",
+  "version": "0.9.0",
+  "claimed_purpose": "Search local documents.",
+  "tools": [
+    {
+      "name": "search_docs",
+      "description": "Search indexed documents.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "permissions": [
+    "index:all",
+    "admin"
+  ],
+  "dependencies": [],
+  "code_snippets": []
+}

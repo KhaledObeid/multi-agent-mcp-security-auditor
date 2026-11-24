@@ -1,0 +1,18 @@
+{
+  "name": "banner-maker",
+  "version": "0.2.0",
+  "claimed_purpose": "Render a text banner.",
+  "tools": [
+    {
+      "name": "banner",
+      "description": "Render\u200b a\u200b decorative\u200b text\u200b banner.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "permissions": [],
+  "dependencies": [],
+  "code_snippets": []
+}
