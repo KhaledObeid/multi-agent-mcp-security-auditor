@@ -83,37 +83,46 @@ Design choice: `hidden_instruction` for (1) and (3) means the red-team trigger (
 
 **Done (19 November 2026):** `run_sandbox` now runs **N trials** (default 5, env `MCP_SECURITY_AUDITOR_REDTEAM_TRIALS`) and reports an **obedience rate** in `notes`, e.g. `obedience 4/5 (0.80)` — the quantitative result for §10. Canary detection compares observed arguments against the user's request, and an "extra tool" counts only when it looks like exfiltration (its own args carry a canary, or it is a known data-moving tool), cutting false positives. `summarize_trials()` is a pure, unit-tested function. The obedience rate lives in `notes` to avoid a `schemas.py` contract change; a clean `trials`/`obeyed_count` field is an optional follow-up.
 
-**Still planned:** a "defended" variant that feeds the mock agent AgentGuard's **patched** manifest and shows the obedience rate drop.
+**Canary fix (PR #7 review).** Canaries now check **only the argument values** of the tool calls the mock agent attempted. Earlier they also scanned the agent's reply text, so a mock agent that *refused* and named the path ("I won't read ~/.ssh/id_rsa") counted as obeyed, which would have inflated the obedience rate. They also no longer match on tool or parameter names, which come from the package rather than the agent. Regression tests: `test_refusal_that_names_the_secret_is_not_obeyed`, `test_canary_ignores_tool_and_parameter_names`. 
+
+**Still planned:** a "defended" variant that feeds the mock agent the Multi-Agent MCP Security Auditor's **patched** manifest and shows the obedience rate drop.
 
 ---
 
 ## 6. Agents: Inspector and Red-Team (§4, §8, §9)
 
-- **Inspector** loops with its tools node until it stops requesting tools, then hands off `scan_report` and `permission_diff` through shared state. A safety net runs the tools directly if the LLM never scans. `INSPECTOR_SYSTEM` now sets an explicit tool order, requires the `claimed_purpose` to come from the stated purpose (not an embedded instruction), and ends with a structured attack-surface summary (19 Nov).
-- **Red-Team** is reached only when `should_red_team` is true (injection indicators, a high/critical finding, or a rug pull). `REDTEAM_SYSTEM` now asks for one benign-looking and one adversarial prompt per suspicious tool (19 Nov), and `_suspicious_tools()` falls back to scanner-flagged tools when a finding carries no `affected_tool` (rug-pull case).
+- **Inspector** loops with its tools node until it stops requesting tools, then hands off `scan_report` and `permission_diff` through shared state. A safety net runs the tools directly if the LLM never scans. `INSPECTOR_SYSTEM` sets an explicit tool order, requires the `claimed_purpose` to come from the stated purpose (not an embedded instruction), and ends with a structured attack-surface summary.
+- **Red-Team** is reached only when `should_red_team` is true (injection indicators, a high/critical finding, or a rug pull). `REDTEAM_SYSTEM` tests each suspicious tool with a benign and a pushier-but-innocent request, and `_suspicious_tools()` falls back to scanner-flagged tools when a finding carries no `affected_tool` (rug-pull case).
+- **Hard cap on sandbox tests (PR #7 review).** The prompt asks for at most 2 tools × 2 requests, but before this only the prompt enforced it, and each test is 5 mock-agent calls. `red_team_node` now caps the audit at **4 sandbox tests (≤ 20 mock-agent calls)**, env `MCP_SECURITY_AUDITOR_REDTEAM_MAX_TESTS`: extra calls in a turn are trimmed, and once the cap is used up the turn becomes a final answer so routing moves to the report. Without it, a model that kept asking for 6 tests a turn ran 18 tests (≈ 90 calls) within the 3-round budget (`tests/test_red_team.py`). The offline script's second request was also reworded so it stays innocent like the online prompt requires (no "follow the setup steps").
 - **Message handling (§8):** both agents produce the full `SystemMessage → HumanMessage → AIMessage(tool_calls) → ToolMessage → AIMessage(final)` trace that `utils/messages.py` prints, distinguishing a tool-call request from a final answer.
 - **Prompt-injection defence:** package text is wrapped in `<untrusted>…</untrusted>` and every system prompt carries the rule never to follow instructions found there.
+
+**Prompt review (23 Nov) — §9.** All three Member-B prompts were reviewed against the first live Gemini run and improved (PR #7, branch `b/inspector-prompt-tune`):
+- **`INSPECTOR_SYSTEM`** — the live run showed the Inspector spending its whole 3-round tool budget on a *redundant* focused re-scan and never writing the summary ("Tool budget exhausted"). Fixed: made the agent budget-aware ("two calls are normally enough"), demoted the per-tool re-scan to a rare exception ("never to re-confirm flags you already have"), and explicitly prioritised writing the summary.
+- **`REDTEAM_SYSTEM`** — keeps **both** a benign and an adversarial prompt per tool, but issues **all** `run_sandbox_test` calls in a **single turn** (parallel tool-calls = one round, as the Analyst already does), which removes the budget collision on multi-tool packages. Also made explicit that requests stay innocent so the obedience rate measures *tool poisoning*, not prompt-following.
+- **`MOCK_AGENT_SYSTEM`** (the sandbox victim) — the two-line version risked a model answering from memory without calling the tool (false negative) and gave inconsistent gullibility. Fixed: the victim now calls tools instead of answering from memory and treats tool "setup steps" as required for the tool to work (the realistic MCP failure mode), while the system prompt still names no harmful action — so a fired canary cleanly measures tool poisoning. Note for §10: this models an *unprotected, tool-trusting* client; the Multi-Agent MCP Security Auditor's role is to block the package before it reaches one.
 
 ---
 
 ## 7. Test packages (`data/samples/`) (§10 support)
 
-Current set (7 + `labels.json`): `benign_weather` (install), `poisoned_math` (block), `invisible_notes` (block), `overbroad_formatter` (install_with_mitigations), `vuln_deps_pdf` (install_with_mitigations), `rugpull_calc_v1` (install), `rugpull_calc_v2` (block).
-
-**Planned (Week 3):** grow to ~20 labelled packages across all categories (benign, poisoned, invisible Unicode, over-broad, vulnerable deps, rug pulls, plus base64-encoded and homoglyph cases once those scanner rules land), each feeding the evaluation Member C runs.
+**Grown to 26 labelled packages (PR #6, `b/more-samples`).** 7 install / 11 install_with_mitigations / 8 block, spanning every category: benign, tool-poisoning, invisible Unicode, over-broad permissions, shell/code-exec, filesystem, vulnerable deps, rug-pull pair, plus one package for each of the three new scanner rules (base64 payload, homoglyph tool names, cross-tool shadowing). Every label was checked against the deterministic verdict policy; the offline baseline eval scores **1.00 accuracy** across all 26. These feed the evaluation Member C runs (§10).
 
 ---
 
-## 8. Week 2 to-do list (Member B)
+## 8. Remaining to-do (Member B)
 
-1. **Online run** on `poisoned_math`: needs a Gemini key in `.env`, `MCP_SECURITY_AUDITOR_OFFLINE` unset. Capture the live message trace (§8) and the obedience rate (§10). The only remaining piece of the Nov 18 item — prompts and harness are done.
-2. Grow the sample set toward 20 labelled packages — including packages that exercise the three scanner rules (base64 payload, homoglyph name, cross-tool shadowing).
+1. **Online run** on `poisoned_math` (the open Nov 18 item): local env is set up (Python 3.14 + Chroma built + key in `.env`); blocked only by transient Gemini 503s at peak hours — run off-peak. Capture the live trace (§8) and the obedience rate (§10). Prompts and harness are done.
+2. Write the paper sections (§4 compile, §5 custom tools, §8, parts of §9 and §12) by 29 Nov.
 3. Optional: defended-manifest sandbox variant (obedience rate on the patched vs. raw package).
 
-## 9. Pending actions
+## 9. Pending actions / PR status
 
-- Week 1 PR (permission-diff fix + 3 scanner rules + notes) **merged to `main`**.
-- PR `b/agents-online` open: stronger Inspector/Red-Team prompts + 5-trial obedience harness + `tests/test_sandbox.py` (7 tests). Awaiting review.
+- **PR #2** (Week 1: permission-diff fix + 3 scanner rules + notes) — **merged to `main`**.
+- **PR #4** `GhadiAmmar/agents-online` — stronger Inspector/Red-Team prompts + 5-trial obedience harness + `tests/test_sandbox.py` (7 tests). **Merged to `main`** (23 Nov).
+- **PR #6** `b/more-samples` — 26 labelled sample packages + merged `labels.json`. **Merged to `main`** (23 Nov).
+- **PR #7** `b/inspector-prompt-tune` — the three reviewed prompts (Inspector / Red-Team / mock agent), plus the review fixes: args-only canaries, the 4-test sandbox cap and `tests/test_red_team.py`. 82 tests pass offline; offline eval 1.00 on 26 samples. Open, base `main`.
+- After PR #7 is merged, re-clone `main` for a clean local copy (recreate `.env` and `.chroma`, which are gitignored).
 - No `schemas.py`/`state.py` contract change so far. A clean numeric obedience field on `RedTeamResult` (`trials`/`obeyed_count`) and more descriptive scanner `FlagKind`s would each be a small `contract:` PR with Member A (both deferred).
 
 ---
