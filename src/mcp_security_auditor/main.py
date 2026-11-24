@@ -13,6 +13,10 @@ demo: MemorySaver is in-memory, so continuity lasts for the life of the process.
 
 The trace prints, for every node, the messages it added and a STATE DIFF: only
 the fields whose value changed, as "before -> after".
+
+In the REPL, any line that is not a command goes to the Report chat
+(agents/report_chat.py), which answers questions about the audit on the current
+thread and can start a new audit itself.
 """
 from __future__ import annotations
 
@@ -21,14 +25,16 @@ import json
 from enum import Enum
 from pathlib import Path
 
-from langchain_core.messages import BaseMessage, RemoveMessage
+from langchain_core.messages import AIMessage, BaseMessage, RemoveMessage, ToolMessage
 from pydantic import BaseModel
 
+from mcp_security_auditor.agents.report_chat import ChatTurn, ReportChat
 from mcp_security_auditor.graph import build_graph
 from mcp_security_auditor.schemas import AuditFindings, FinalReport, PermissionDiff, ScanReport, ToolPackage
 from mcp_security_auditor.utils.messages import print_message
 
-CHANNELS = {"inspector_messages": "Inspector", "analyst_messages": "Analyst", "redteam_messages": "RedTeam"}
+CHANNELS = {"inspector_messages": "Inspector", "analyst_messages": "Analyst", "redteam_messages": "RedTeam",
+            "chat_messages": "Chat"}
 SAMPLES_DIR = Path(__file__).resolve().parents[2] / "data" / "samples"
 MAX_VALUE_CHARS = 120
 
@@ -40,7 +46,14 @@ HELP = """Commands:
   report                       the last verdict, rationale and mitigations again
   patched                      the patched manifest from the last audit
   history [full]               checkpoints grouped by audit, with the node and fields of each step
-  help | quit"""
+  help | quit
+Anything else goes to the Report chat, for example:
+  I think data/samples/poisoned_math.json is compromised    (the chat audits it)
+  which tool?  /  why?  /  what did the sandbox show?        (one level deeper each time)
+  I'm technical  /  plain language please                    (answer style, kept on this thread)
+  re-audit                                                   (audit the last sample again)"""
+# commands that take no argument: a longer line starting with one of these words goes to the chat
+BARE_COMMANDS = {"samples", "state", "report", "patched", "help", "quit", "exit"}
 
 
 # --------------------------------------------------------------------------- #
@@ -227,15 +240,21 @@ def show_history(graph, thread_id: str, full: bool = False) -> None:
     for snap in snaps:
         if snap.metadata.get("source") == "input":
             groups.append([])
-        writer = "input" if prev is None or snap.metadata.get("source") == "input" else (prev.next or ("?",))[0]
+        if not groups:  # the chat wrote to this thread before its first audit
+            groups.append([])
+        if snap.metadata.get("source") == "update":
+            writer = "chat"
+        else:
+            writer = "input" if prev is None or snap.metadata.get("source") == "input" else (prev.next or ("?",))[0]
         groups[-1].append((snap, writer, _changed_fields(prev.values, snap.values) if prev else []))
         prev = snap
 
-    print(f"thread '{thread_id}': {len(groups)} audit(s), {len(snaps)} checkpoint(s), oldest first")
+    audits = sum(1 for g in groups if g[0][0].metadata.get("source") == "input")
+    print(f"thread '{thread_id}': {audits} audit(s), {len(snaps)} checkpoint(s), oldest first")
     for i, group in enumerate(groups, 1):
         last = group[-1][0].values
         pkg, rep = last.get("package"), last.get("final_report")
-        title = f"{pkg.name} v{pkg.version}" if pkg else "?"
+        title = f"{pkg.name} v{pkg.version}" if pkg else "(chat only, no audit yet)"
         outcome = rep.verdict.value if rep and not group[-1][0].next else "not finished"
         rug = ", RUG PULL" if last.get("rug_pull_detected") else ""
         print(f"\naudit {i}: {title} -> {outcome}{rug}  "
@@ -249,9 +268,27 @@ def show_history(graph, thread_id: str, full: bool = False) -> None:
 # --------------------------------------------------------------------------- #
 # REPL and CLI
 # --------------------------------------------------------------------------- #
+def print_chat_turn(turn: ChatTurn) -> None:
+    print(f"\nChat: {turn.reply}")
+    for e in turn.errors:
+        print(f"  (note: {e})")
+
+
+def _is_command(cmd: str, arg: str) -> bool:
+    if cmd in BARE_COMMANDS:
+        return not arg
+    if cmd == "history":
+        return arg in ("", "full")
+    if cmd == "thread":
+        return len(arg.split()) <= 1
+    return cmd == "audit"
+
+
 def repl() -> None:
     graph, thread = build_graph(), "default"
-    print("Multi-Agent MCP Security Auditor REPL. Type 'help' for commands.")
+    chat = ReportChat(graph, run_audit=lambda pkg, t: run_audit(graph, pkg, t),
+                      echo=lambda m: print_message(m, "Chat") if isinstance(m, AIMessage | ToolMessage) else None)
+    print("Multi-Agent MCP Security Auditor REPL. Type 'help' for commands, or ask the Report chat a question.")
     while True:
         try:
             line = input(f"mcp-security-auditor[{thread}]> ").strip()
@@ -261,7 +298,9 @@ def repl() -> None:
         arg = arg.strip()
         config = {"configurable": {"thread_id": thread}}
         try:
-            if cmd == "audit":
+            if line and not _is_command(cmd, arg):
+                print_chat_turn(chat.turn(thread, line))
+            elif cmd == "audit":
                 if not arg:
                     print("usage: audit <path | sample name>")
                 else:
@@ -285,8 +324,6 @@ def repl() -> None:
                 print(HELP)
             elif cmd in ("quit", "exit"):
                 break
-            elif cmd:
-                print(f"unknown command '{cmd}'. Type 'help' for commands.")
         except Exception as e:  # keep the REPL alive on bad input
             print(f"error: {type(e).__name__}: {e}")
 

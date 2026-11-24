@@ -52,7 +52,7 @@ def test_repl_demo_session(monkeypatch, capsys):
     assert "audit 2: calc-pro-mcp v1.0.1 -> block, RUG PULL" in out
     assert "step=-1" in out                                        # history full keeps the raw view
     assert '"name": "calc-pro-mcp"' in out                         # patched manifest
-    assert "unknown command 'frobnicate'" in out
+    assert "Chat: I can only answer questions about the audited package" in out  # non-commands go to the chat
     assert "usage: audit" in out
 
 
