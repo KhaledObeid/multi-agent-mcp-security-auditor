@@ -1,5 +1,5 @@
 {
-  "fetched": "2026-11-15",
+  "fetched": "2026-11-24",
   "source": "https://api.osv.dev/v1/query",
   "entries": {
     "PyPI:httpx==0.27.0": {
@@ -51,6 +51,43 @@
         "Pillow: NULL dereference in ImagingExpand via rank filters on zero-size images",
         "Pillow: Heap buffer overflow in _tiffWriteProc when saving TIFF to BytesIO",
         "Arbitrary Code Execution in Pillow"
+      ]
+    },
+    "PyPI:urllib3==1.24.1": {
+      "vuln_ids": [
+        "CVE-2025-66471",
+        "CVE-2024-37891",
+        "CVE-2026-21441",
+        "CVE-2023-45803",
+        "CVE-2025-66418",
+        "CVE-2018-25091",
+        "CVE-2019-11324",
+        "CVE-2025-50181",
+        "CVE-2026-44431",
+        "CVE-2019-11236"
+      ],
+      "summaries": [
+        "urllib3 streaming API improperly handles highly compressed data",
+        "urllib3's Proxy-Authorization request header isn't stripped during cross-origin redirects",
+        "Decompression-bomb safeguards bypassed when following HTTP redirects (streaming API)",
+        "urllib3's request body not stripped after redirect from 303 status changes request method to GET",
+        "urllib3 allows an unbounded number of links in the decompression chain"
+      ]
+    },
+    "PyPI:numpy==1.16.0": {
+      "vuln_ids": [
+        "CVE-2021-41495",
+        "CVE-2021-33430",
+        "CVE-2019-6446",
+        "CVE-2021-41496",
+        "CVE-2021-34141"
+      ],
+      "summaries": [
+        "NumPy NULL Pointer Dereference",
+        "NumPy Buffer Overflow (Disputed)",
+        "Numpy Deserialization of Untrusted Data",
+        "Buffer Copy without Checking Size of Input in NumPy",
+        "Incorrect Comparison in NumPy"
       ]
     }
   }
