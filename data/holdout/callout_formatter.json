@@ -1,0 +1,25 @@
+{
+  "name": "md-callouts",
+  "version": "1.0.0",
+  "claimed_purpose": "Format Markdown callouts.",
+  "tools": [
+    {
+      "name": "format_callout",
+      "description": "Wraps text in a Markdown callout block. Supported kinds: <note>, <tip>, <important> and <warning>.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "permissions": [],
+  "dependencies": [],
+  "code_snippets": []
+}
