@@ -13,7 +13,30 @@ START -> intake -> Inspector <-> inspector_tools
                 -> END
 ```
 
-Print the exact graph as Mermaid with `python -m mcp_security_auditor.main graph`.
+```mermaid
+flowchart TD
+    START([START]) --> intake["intake<br/>hashes, rug-pull check, per-run reset"]
+    intake --> inspector[Inspector]
+    inspector -. tool calls .-> inspector_tools[["inspector_tools<br/>scan_manifest, check_permissions"]]
+    inspector_tools --> inspector
+    inspector -. done .-> analyst[Threat Analyst]
+    analyst -. tool calls .-> analyst_tools[["analyst_tools<br/>search_security_kb, query_osv"]]
+    analyst_tools --> analyst
+    analyst -. done .-> findings["analyst_findings<br/>Structured Output: AuditFindings"]
+    findings -. "should_red_team: injection signs,<br/>rug pull or high finding on a tool" .-> red_team[Red-Team]
+    findings -. otherwise .-> report
+    red_team -. tool calls .-> redteam_tools[["redteam_tools<br/>run_sandbox_test"]]
+    redteam_tools --> red_team
+    red_team -. done .-> report["Report<br/>policy floor, patcher,<br/>Structured Output: FinalReport"]
+    report --> END([END])
+
+    memory[("MemorySaver<br/>one checkpoint history per thread_id")]
+    chat["Report chat (REPL)<br/>Structured Output: ChatReply"]
+    chat -- "reads the audit; writes only<br/>chat_messages, user_expertise" --> memory
+    chat -- "start_audit(path): runs the whole graph<br/>on the same thread" --> START
+```
+
+Dotted arrows are conditional edges. The exact graph LangGraph compiles can be printed as Mermaid with `python -m mcp_security_auditor.main graph`.
 
 ## Install
 
