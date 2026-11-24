@@ -251,14 +251,19 @@ def show_history(graph, thread_id: str, full: bool = False) -> None:
 
     audits = sum(1 for g in groups if g[0][0].metadata.get("source") == "input")
     print(f"thread '{thread_id}': {audits} audit(s), {len(snaps)} checkpoint(s), oldest first")
-    for i, group in enumerate(groups, 1):
-        last = group[-1][0].values
-        pkg, rep = last.get("package"), last.get("final_report")
-        title = f"{pkg.name} v{pkg.version}" if pkg else "(chat only, no audit yet)"
-        outcome = rep.verdict.value if rep and not group[-1][0].next else "not finished"
-        rug = ", RUG PULL" if last.get("rug_pull_detected") else ""
-        print(f"\naudit {i}: {title} -> {outcome}{rug}  "
-              f"(audit_history now holds {len(last.get('audit_history', []))} record(s))")
+    number = 0
+    for group in groups:
+        if group[0][0].metadata.get("source") != "input":  # chat lines typed before the first audit
+            print("\nbefore the first audit: chat only")
+        else:
+            number += 1
+            last = group[-1][0].values
+            pkg, rep = last.get("package"), last.get("final_report")
+            title = f"{pkg.name} v{pkg.version}" if pkg else "?"
+            outcome = rep.verdict.value if rep and not group[-1][0].next else "not finished"
+            rug = ", RUG PULL" if last.get("rug_pull_detected") else ""
+            print(f"\naudit {number}: {title} -> {outcome}{rug}  "
+                  f"(audit_history now holds {len(last.get('audit_history', []))} record(s))")
         for snap, writer, changed in group:
             cid = snap.config["configurable"]["checkpoint_id"][-8:]
             fields = ", ".join(changed) if changed else "-"

@@ -420,3 +420,25 @@ def test_repl_sends_non_commands_to_the_chat(monkeypatch, capsys):
     assert "Chat: " + OUT_OF_SCOPE_REPLY in out
     assert "user_expertise" in out and "'technical'" in out
     assert "chat " in out                                             # history labels chat checkpoints
+
+
+def test_history_does_not_count_chat_before_the_first_audit_as_an_audit(capsys):
+    chat = new_chat()
+    chat.turn("t", "I think this package is compromised")  # chat only, before any audit
+    chat.turn("t", "poisoned_math")
+    main.show_history(chat.graph, "t")
+    out = capsys.readouterr().out
+    assert "thread 't': 1 audit(s)" in out
+    assert "before the first audit: chat only" in out
+    assert "audit 1: quick-math-mcp v0.3.1 -> block" in out and "audit 2" not in out
+
+
+def test_long_id_lists_say_how_many_were_left_out():
+    chat = audited_chat(sample="vuln_deps_pdf")
+    values = chat.values("t")
+    pillow = next(d for d in values["dependency_vulns"] if d.package == "pillow")
+    hidden = len(pillow.vuln_ids) - 6
+    assert hidden > 0
+    assert f"(+{hidden} more)" in report_chat.audit_context(values)          # what the model sees
+    chat.turn("t", "I'm technical")
+    assert f"(+{hidden} more)" in chat.turn("t", "which CVEs?").reply       # rule-based answer

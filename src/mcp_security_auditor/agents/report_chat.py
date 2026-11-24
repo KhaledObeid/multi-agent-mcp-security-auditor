@@ -94,7 +94,8 @@ this audit, and how to use the auditor (commands: audit, samples, report, patche
 For anything else, set in_scope to false.
 
 Grounding: use only facts from the audit data in the latest message. Never invent findings, tools, CVE ids or OWASP
-ids. If the audit data does not answer the question, say so and offer a re-audit.
+ids. A list ending in "(+N more)" was shortened: say that more exist rather than presenting it as complete. If the
+audit data does not answer the question, say so and offer a re-audit.
 
 Follow-ups: each follow-up goes one level deeper than your previous answer, in this order: which tool is affected,
 what evidence was found, what the sandbox test showed, what the patch removes. If the user still has doubts, offer a
@@ -182,7 +183,7 @@ PATH_TOKEN = re.compile(r"(?<![\w~./-])(~?[\w./-]*/[\w./-]+|[\w./-]+\.json)(?![\
 ID_IN_TEXT = re.compile(r"\b(ASI\d{2}|LLM\d{2}|CVE-\d{4}-\d{4,}|GHSA(?:-[0-9a-z]{4}){3}|PYSEC-\d{4}-\d+)\b")
 
 IN_SCOPE_WORDS = re.compile(r"""(?ix)\b(audit\w*|package|tools?|verdict|findings?|sandbox|red[\s-]?team|patch\w*
-    |permissions?|install\w*|block\w*|risks?|safe|safety|mcp|security|cve|owasp|dependenc\w+|vulnerab\w+|evidence
+    |permissions?|install\w*|block\w*|risks?|safe|safety|mcp|security|cves?|owasp|categor\w*|ids?|dependenc\w+|vulnerab\w+|evidence
     |mitigation\w*|why|explain\w*|means?|meaning|more|details?|deeper|report|attack\w*|inject\w*|instructions?
     |agents?|hidden|scanner|policy|help|trust|doubts?|sure|minimum|rug\s+pull|manifest|severity|critical|obey\w*
     |canary|samples?|thread|history|commands?|how\s+do\s+i\s+use
@@ -287,6 +288,12 @@ def _clip(text: str, n: int) -> str:
     return text if len(text) <= n else text[:n] + "..."
 
 
+def _ids(ids: list[str], limit: int = 6) -> str:
+    """At most `limit` ids, saying how many were left out, so a cut list never looks complete."""
+    shown = ", ".join(ids[:limit])
+    return shown + (f" (+{len(ids) - limit} more)" if len(ids) > limit else "")
+
+
 def audit_context(values: dict) -> str:
     """The audit data for the model. Only enum values stay outside the tags;
     everything derived from the package is inside <untrusted> (closing tags in
@@ -303,7 +310,7 @@ def audit_context(values: dict) -> str:
     for f in findings[:12]:
         lines.append(f"- [{f.severity.value}] {f.owasp_category.value} | tool: {f.affected_tool or 'package-level'} | "
                      f"{_clip(f.title, 120)} | evidence: {_clip(f.evidence, 200)} | references: "
-                     f"{', '.join(f.references[:6]) or '-'}")
+                     f"{_ids(f.references) or '-'}")
     scan = values.get("scan_report")
     if scan and scan.flags:
         rules: dict[str, int] = {}
@@ -317,7 +324,7 @@ def audit_context(values: dict) -> str:
     vulns = [d for d in values.get("dependency_vulns", []) if d.vuln_ids]
     if vulns:
         lines.append("Dependencies with known vulnerabilities: "
-                     + "; ".join(f"{d.package} {d.version}: {', '.join(d.vuln_ids[:6])}" for d in vulns))
+                     + "; ".join(f"{d.package} {d.version}: {_ids(d.vuln_ids)}" for d in vulns))
     rts = values.get("red_team_results", [])
     if rts:
         lines.append("Sandbox (red team) tests:")
@@ -414,8 +421,7 @@ def _level_tools(values: dict, technical: bool) -> str:
         vulns = [d for d in values.get("dependency_vulns", []) if d.vuln_ids]
         if vulns:
             parts.append("Known vulnerabilities: " + "; ".join(
-                f"{d.package} {d.version}: {', '.join(d.vuln_ids[:5])}"
-                + (f" (+{len(d.vuln_ids) - 5} more)" if len(d.vuln_ids) > 5 else "") for d in vulns) + ".")
+                f"{d.package} {d.version}: {_ids(d.vuln_ids)}" for d in vulns) + ".")
     return " ".join(parts)
 
 
