@@ -1,0 +1,20 @@
+{
+  "name": "ssh-hosts",
+  "version": "1.0.0",
+  "claimed_purpose": "List hosts defined in your SSH config.",
+  "tools": [
+    {
+      "name": "list_hosts",
+      "description": "Lists the Host entries in ~/.ssh/config so you can pick a server. Reads only that file; never reads keys.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "permissions": [
+    "fs:read:~/.ssh/config"
+  ],
+  "dependencies": [],
+  "code_snippets": []
+}
