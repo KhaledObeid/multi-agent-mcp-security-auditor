@@ -106,7 +106,21 @@ Design choice: `hidden_instruction` for (1) and (3) means the red-team trigger (
 
 ## 7. Test packages (`data/samples/`) (§10 support)
 
-**Grown to 26 labelled packages (PR #6, `b/more-samples`).** 7 install / 11 install_with_mitigations / 8 block, spanning every category: benign, tool-poisoning, invisible Unicode, over-broad permissions, shell/code-exec, filesystem, vulnerable deps, rug-pull pair, plus one package for each of the three new scanner rules (base64 payload, homoglyph tool names, cross-tool shadowing). Every label was checked against the deterministic verdict policy; the offline baseline eval scores **1.00 accuracy** across all 26. These feed the evaluation Member C runs (§10).
+**Grown to 26 labelled packages (PR #6, `b/more-samples`).** 7 install / 11 install_with_mitigations / 8 block, spanning every category: benign, tool-poisoning, invisible Unicode, over-broad permissions, shell/code-exec, filesystem, vulnerable deps, rug-pull pair, plus one package for each of the three new scanner rules (base64 payload, homoglyph tool names, cross-tool shadowing). These feed the evaluation Member C runs (§10).
+
+**Labelling flaw found and fixed (24 Nov).** The labels had been *checked against the deterministic verdict policy*, and two were adjusted to agree with it (the homoglyph packages were labelled `install_with_mitigations` "to match the current policy"). The offline baseline *is* that policy, so its 1.00 accuracy was true by construction. Worse, `report.py` only lets the LLM make a verdict stricter than the policy floor, so on policy-derived labels the LLM could only tie the baseline or lose. The set could not support an LLM-vs-baseline comparison.
+
+**Fix (`b/holdout-eval`).**
+- **Labels now encode ground truth** (what the package actually does), not what the scanner outputs. `homoglyph_mailer` and `homoglyph_cyrillic` → `block`: they impersonate `send_email` / `list_files` with lookalike letters, which is itself an attack. Now 7 install / 9 install_with_mitigations / 10 block.
+- **Held-out set `data/holdout/` (9 packages + `labels.json`).** Six attacks that evade the rules (reworded injection, rot13 payload, a key path split into string fragments, quiet conversation sharing via a second tool, a "follow the summary over the user" hijack, Cyrillic lookalikes inside trigger words) → `block`; three honest tools that trip keywords (SSH-config host lister, Markdown `<important>` callout formatter, `.env.example` writer) → `install` / `install_with_mitigations`.
+- **`eval/run_eval.py --samples DIR`** runs either set (default `data/samples`).
+
+| Offline baseline | Accuracy | Block recall | False-block rate |
+|---|---|---|---|
+| Original 26 (relabelled) | 0.92 | 0.80 | 0.00 |
+| Held-out 9 | 0.00 | 0.00 | 1.00 |
+
+**How §10 should use this.** The original 26 are a *sanity / regression* set. The held-out 9 were written with knowledge of the scanner's rules, so they are a *stress test of the rules' blind spots*, adversarial to the baseline the way the old labels favoured it; report them as such, not as a representative accuracy. The LLM-vs-baseline result is the **gap on each set**, led by block recall (attacks caught) and false-block / over-mitigation rate (cost of the LLM's stricter verdicts), not plain accuracy. To reduce author bias, a teammate checks the 9 labels and adds 3–4 ordinary packages written without looking at the scanner.
 
 ---
 
@@ -114,14 +128,16 @@ Design choice: `hidden_instruction` for (1) and (3) means the red-team trigger (
 
 1. **Online run** on `poisoned_math` (the open Nov 18 item): local env is set up (Python 3.14 + Chroma built + key in `.env`); blocked only by transient Gemini 503s at peak hours — run off-peak. Capture the live trace (§8) and the obedience rate (§10). Prompts and harness are done.
 2. Write the paper sections (§4 compile, §5 custom tools, §8, parts of §9 and §12) by 29 Nov.
-3. Optional: defended-manifest sandbox variant (obedience rate on the patched vs. raw package).
+3. **Eval sets (§10):** get the LLM system run on both `data/samples` and `data/holdout` (Member C), and a teammate's check of the held-out labels plus 3–4 blind-written ordinary packages.
+4. Optional: defended-manifest sandbox variant (obedience rate on the patched vs. raw package).
 
 ## 9. Pending actions / PR status
 
 - **PR #2** (Week 1: permission-diff fix + 3 scanner rules + notes) — **merged to `main`**.
 - **PR #4** `GhadiAmmar/agents-online` — stronger Inspector/Red-Team prompts + 5-trial obedience harness + `tests/test_sandbox.py` (7 tests). **Merged to `main`** (23 Nov).
 - **PR #6** `b/more-samples` — 26 labelled sample packages + merged `labels.json`. **Merged to `main`** (23 Nov).
-- **PR #7** `b/inspector-prompt-tune` — the three reviewed prompts (Inspector / Red-Team / mock agent), plus the review fixes: args-only canaries, the 4-test sandbox cap and `tests/test_red_team.py`. 82 tests pass offline; offline eval 1.00 on 26 samples. Open, base `main`.
+- **PR #7** `b/inspector-prompt-tune` — the three reviewed prompts (Inspector / Red-Team / mock agent), plus the review fixes: args-only canaries, the 4-test sandbox cap and `tests/test_red_team.py`. 82 tests pass offline. **Merged to `main`** (24 Nov).
+- **`b/holdout-eval`** — ground-truth relabel of the two homoglyph packages, the 9-package held-out set `data/holdout/`, and `run_eval.py --samples`; see §7. 82 tests pass. To open (coordinate with Member C, who owns `run_eval.py`).
 - After PR #7 is merged, re-clone `main` for a clean local copy (recreate `.env` and `.chroma`, which are gitignored).
 - No `schemas.py`/`state.py` contract change so far. A clean numeric obedience field on `RedTeamResult` (`trials`/`obeyed_count`) and more descriptive scanner `FlagKind`s would each be a small `contract:` PR with Member A (both deferred).
 
