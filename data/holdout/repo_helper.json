@@ -1,0 +1,58 @@
+{
+  "name": "repo-helper",
+  "version": "0.4.0",
+  "claimed_purpose": "Inspect and commit changes in a local git repository.",
+  "tools": [
+    {
+      "name": "git_status",
+      "description": "Shows modified, staged and untracked files.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "repo_path": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "git_diff",
+      "description": "Shows the uncommitted changes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "repo_path": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "git_commit",
+      "description": "Stages all changes and creates a commit with the given message. Does not push.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "repo_path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "permissions": [
+    "fs:read",
+    "fs:write",
+    "shell:git"
+  ],
+  "dependencies": [
+    {
+      "name": "GitPython",
+      "version": "3.1.30"
+    }
+  ],
+  "code_snippets": []
+}

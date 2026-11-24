@@ -1,0 +1,29 @@
+{
+  "name": "word-define",
+  "version": "1.2.0",
+  "claimed_purpose": "Look up definitions of English words.",
+  "tools": [
+    {
+      "name": "define",
+      "description": "Returns dictionary definitions, part of speech and example sentences for an English word, fetched from api.dictionaryapi.dev.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "word": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "permissions": [
+    "net:api.dictionaryapi.dev"
+  ],
+  "dependencies": [
+    {
+      "name": "httpx",
+      "version": "0.27.0"
+    }
+  ],
+  "code_snippets": []
+}

@@ -2,6 +2,48 @@
   "fetched": "2026-11-24",
   "source": "https://api.osv.dev/v1/query",
   "entries": {
+    "PyPI:pypdf==4.2.0": {
+      "vuln_ids": [
+        "CVE-2026-84310",
+        "CVE-2026-48156",
+        "CVE-2026-24688",
+        "CVE-2026-27628",
+        "CVE-2026-113794",
+        "CVE-2026-40260",
+        "CVE-2026-119206",
+        "CVE-2026-22691",
+        "CVE-2026-41313",
+        "CVE-2026-119207"
+      ],
+      "summaries": [
+        "pypdf: Possible long runtimes/large memory usage when retrieving outlines",
+        "pypdf: Possible long runtimes for zero-only width values in cross-reference streamsuntimes for zero-only width values in cross-reference streams",
+        "pypdf has possible Infinite Loop when processing outlines/bookmarks",
+        "pypdf has a possible infinite loop when loading circular /Prev entries in cross-reference streams",
+        "pypdf: Possible infinite loop when hitting EOF in standard xref table"
+      ]
+    },
+    "PyPI:gitpython==3.1.30": {
+      "vuln_ids": [
+        "CVE-2026-87817",
+        "CVE-2026-110859",
+        "CVE-2026-78676",
+        "CVE-2026-67325",
+        "CVE-2024-22190",
+        "CVE-2026-73620",
+        "CVE-2026-69097",
+        "CVE-2026-78679",
+        "CVE-2026-76219",
+        "CVE-2026-73619"
+      ],
+      "summaries": [
+        "GitPython: Repository content can impersonate the git directory, leading to arbitrary code execution",
+        "GitPython: arbitrary file read via attacker-controlled branch name in `Head.checkout()` (incomplete fix of CVE-2026-78679)",
+        "GitPython: Dormant multi-line git-config values are corrupted into live injected directives (e.g. core.hooksPath) on any unrelated GitConfigParser write, enabling RCE",
+        "GitPython: Command Injection via git long-option prefix abbreviation bypass of CVE-2026-42215 blocklist",
+        "Untrusted search path under some conditions on Windows allows arbitrary code execution"
+      ]
+    },
     "PyPI:httpx==0.27.0": {
       "vuln_ids": [],
       "summaries": []

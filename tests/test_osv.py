@@ -102,3 +102,16 @@ def test_refresh_writes_cache_and_never_writes_a_partial_one(env, tmp_path):
     with pytest.raises(RuntimeError, match="cache not written"):
         osv.refresh_cache(samples, path)
     assert path.read_text(encoding="utf-8") == before
+
+
+def test_refresh_reads_every_sample_folder(env, tmp_path):
+    """The default refresh covers data/samples and data/holdout, so neither set loses its cached entries."""
+    _, path, _ = env
+    for folder, dep in (("samples", "pyyaml"), ("holdout", "httpx")):
+        (tmp_path / folder).mkdir()
+        pkg = {"name": folder, "version": "1", "claimed_purpose": "x", "tools": [],
+               "dependencies": [{"name": dep, "version": "5.3" if dep == "pyyaml" else "0.27.0"}]}
+        (tmp_path / folder / "p.json").write_text(json.dumps(pkg), encoding="utf-8")
+    data = osv.refresh_cache((tmp_path / "samples", tmp_path / "holdout"), path)
+    assert set(data["entries"]) == {"PyPI:pyyaml==5.3", "PyPI:httpx==0.27.0"}
+    assert osv.SAMPLE_DIRS[1].name == "holdout"

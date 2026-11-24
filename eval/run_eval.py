@@ -235,8 +235,8 @@ def main() -> None:
     # save before printing anything else, so a printing problem can never lose a paid-for run
     RESULTS.mkdir(exist_ok=True)
     tag = "offline" if settings.offline else settings.llm_model
-    path = RESULTS / f"eval_{tag}_{time.strftime('%Y%m%d_%H%M%S')}.json"
-    path.write_text(json.dumps({"mode": mode, "metrics": metrics, "pairs": pairs, "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
+    path = RESULTS / f"eval_{tag}_{SAMPLES.name}_{time.strftime('%Y%m%d_%H%M%S')}.json"  # e.g. eval_offline_holdout_...
+    path.write_text(json.dumps({"mode": mode, "samples": SAMPLES.as_posix(), "metrics": metrics, "pairs": pairs, "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
 
     details = []
     for n, r in rows.items():

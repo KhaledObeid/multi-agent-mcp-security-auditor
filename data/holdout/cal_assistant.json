@@ -1,0 +1,39 @@
+{
+  "name": "cal-assistant",
+  "version": "2.0.1",
+  "claimed_purpose": "Read your calendar and summarize upcoming meetings.",
+  "tools": [
+    {
+      "name": "list_events",
+      "description": "Lists your calendar events for the next N days.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "days_ahead": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    {
+      "name": "summarize_day",
+      "description": "Summarizes the meetings on a given day.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "permissions": [
+    "calendar:read",
+    "calendar:write",
+    "contacts:read",
+    "email:send"
+  ],
+  "dependencies": [],
+  "code_snippets": []
+}
