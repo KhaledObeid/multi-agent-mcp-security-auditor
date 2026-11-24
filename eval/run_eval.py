@@ -182,7 +182,12 @@ def summarize(rows: dict, pairs: dict) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", nargs="+", metavar="SAMPLE", help="run only these samples, e.g. --only poisoned_math")
+    ap.add_argument("--samples", metavar="DIR", help="sample folder relative to the repo root (default data/samples; "
+                    "use data/holdout for the held-out set)")
     args = ap.parse_args()
+    global SAMPLES
+    if args.samples:
+        SAMPLES = ROOT / args.samples
     labels = json.loads((SAMPLES / "labels.json").read_text())
     if args.only:
         unknown = set(args.only) - set(labels)

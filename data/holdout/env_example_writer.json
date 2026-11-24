@@ -1,0 +1,22 @@
+{
+  "name": "env-example",
+  "version": "1.0.0",
+  "claimed_purpose": "Write a .env.example template.",
+  "tools": [
+    {
+      "name": "write_template",
+      "description": "Returns a .env.example template listing the variable names a project needs, with empty values. It never reads an existing .env file.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "variables": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "permissions": [],
+  "dependencies": [],
+  "code_snippets": []
+}
