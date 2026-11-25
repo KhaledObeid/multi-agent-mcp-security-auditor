@@ -1,6 +1,7 @@
 """LangGraph state for the Multi-Agent MCP Security Auditor (Pydantic BaseModel, as the guidelines require).
 
-OWNER: Member A. FROZEN AFTER WEEK 1 (same rule as schemas.py).
+OWNER: Member A. FROZEN AFTER WEEK 1 (Nov 11, 2026; same rule as schemas.py),
+enforced by tests/test_contract_freeze.py.
 
 Design notes for the report (State Design section):
 - Each agent has its OWN message channel (inspector_messages, analyst_messages,
@@ -29,6 +30,7 @@ from mcp_security_auditor.schemas import (
     RedTeamResult,
     ScanReport,
     ToolPackage,
+    Verdict,
 )
 
 
@@ -64,6 +66,11 @@ class AuditState(BaseModel):
 
     # ---- Report outputs (Member A) ----------------------------------------
     final_report: Optional[FinalReport] = None
+    # guardrail transparency: the minimum verdict the deterministic policy allowed
+    # (kept out of FinalReport on purpose: that is the LLM's SOM target, and the
+    # LLM must never be the one to fill in its own floor)
+    policy_floor: Optional[Verdict] = None
+    policy_reason: str = ""
     patched_manifest: Optional[dict] = None
     patch_changes: list[str] = Field(default_factory=list)
 

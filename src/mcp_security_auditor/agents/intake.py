@@ -3,7 +3,10 @@
 1. Hashes the package and each tool description.
 2. Compares with the last NON-BLOCKED audit of the same package name stored in
    audit_history (this only works because MemorySaver keeps state per thread_id),
-   and flags a rug pull if any previously approved tool changed.
+   and flags a rug pull if any previously approved tool changed, or if the new
+   version adds a tool or a permission. A new dependency is NOT a rug pull
+   (ordinary updates add them): the report's policy floor treats it as a reason
+   for install_with_mitigations instead (see new_dependencies).
 3. Resets the per-run fields so a second audit on the same thread starts clean
    while audit_history survives (conversation management).
 """
@@ -15,7 +18,7 @@ import json
 from langchain_core.messages import RemoveMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
-from mcp_security_auditor.schemas import Verdict
+from mcp_security_auditor.schemas import AuditRecord, Verdict
 from mcp_security_auditor.state import AuditState
 
 
@@ -23,20 +26,43 @@ def _h(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()[:16]
 
 
+def last_approved(state: AuditState) -> AuditRecord | None:
+    """The latest NON-BLOCKED audit of this package in audit_history, if any.
+    Read before the report node appends the current audit's record."""
+    pkg = state.package
+    previous = [r for r in state.audit_history if r.package_name == pkg.name and r.verdict != Verdict.BLOCK]
+    return previous[-1] if previous else None
+
+
+def new_dependencies(state: AuditState) -> list[str]:
+    """Dependencies ("name==version") added since the last approved audit of this package."""
+    last = last_approved(state)
+    if last is None:
+        return []
+    return [f"{d.name}=={d.version}" for d in state.package.dependencies if d.name not in last.dependencies]
+
+
 def intake_node(state: AuditState) -> dict:
     pkg = state.package
     tool_hashes = {t.name: _h(t.description + json.dumps(t.input_schema, sort_keys=True)) for t in pkg.tools}
     manifest_hash = _h(pkg.model_dump_json())
 
-    previous = [r for r in state.audit_history if r.package_name == pkg.name and r.verdict != Verdict.BLOCK]
+    last = last_approved(state)
     changes: list[str] = []
-    if previous:
-        last = previous[-1]
+    if last is not None:
         for name, h in tool_hashes.items():
             if name in last.tool_hashes and last.tool_hashes[name] != h:
                 changes.append(f"tool '{name}' changed since approved v{last.package_version}")
             elif name not in last.tool_hashes:
                 changes.append(f"new tool '{name}' added since v{last.package_version}")
+        # a rug pull can also keep the descriptions and widen what the package may do.
+        # Only ADDITIONS count: dropping a permission is safe. Dependencies are not
+        # checked here: adding one is a normal update, so it raises the policy floor
+        # to install_with_mitigations (report.policy_triggers) instead of blocking,
+        # and OSV checks every dependency for CVEs and known-malicious releases.
+        for perm in pkg.permissions:
+            if perm not in last.permissions:
+                changes.append(f"new permission '{perm}' requested since v{last.package_version}")
 
     clear = [RemoveMessage(id=REMOVE_ALL_MESSAGES)]
     return {
@@ -57,6 +83,8 @@ def intake_node(state: AuditState) -> dict:
         "needs_red_team": False,
         "red_team_results": [],
         "final_report": None,
+        "policy_floor": None,
+        "policy_reason": "",
         "patched_manifest": None,
         "patch_changes": [],
         "tool_rounds": {},

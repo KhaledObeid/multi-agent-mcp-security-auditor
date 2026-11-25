@@ -31,6 +31,12 @@ class Settings:
     # against custom temperature on Gemini 3+ (it can cause looping and weaker
     # reasoning). Only set this when using an older model.
     temperature: float | None = _optional_float("MCP_SECURITY_AUDITOR_TEMPERATURE")
+    # Per-request limit, so an overloaded model fails fast (and agent_turn falls
+    # back to rule-based steps) instead of hanging the audit for minutes.
+    llm_timeout_s: float = float(os.getenv("MCP_SECURITY_AUDITOR_LLM_TIMEOUT_S", "30"))
+    # Retries per LLM call (with growing waits in between). Each retry on a busy
+    # model adds tens of seconds; lower it for the live demo.
+    llm_max_retries: int = int(os.getenv("MCP_SECURITY_AUDITOR_LLM_MAX_RETRIES", "3"))
 
     # OFFLINE=1 runs every agent with scripted, rule-based behaviour and no LLM
     # calls. Use it to develop the graph before the agents exist, to run tests

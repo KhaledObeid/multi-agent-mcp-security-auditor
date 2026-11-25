@@ -19,7 +19,8 @@ def get_llm():
     extra = {} if settings.temperature is None else {"temperature": settings.temperature}
     return ChatGoogleGenerativeAI(
         model=settings.llm_model,
-        max_retries=3,  # free tier rate limits: retry instead of crashing
+        max_retries=settings.llm_max_retries,  # free tier rate limits: retry before giving up
+        timeout=settings.llm_timeout_s,
         **extra,
     )
 
