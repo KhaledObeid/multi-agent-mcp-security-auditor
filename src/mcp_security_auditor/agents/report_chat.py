@@ -44,6 +44,7 @@ from typing import Callable, Optional
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 
+from mcp_security_auditor.agents.red_team import SANDBOX_SKIPPED
 from mcp_security_auditor.agents.report import _untrusted
 from mcp_security_auditor.config import ROOT, settings
 from mcp_security_auditor.schemas import ChatReply, ToolPackage, Verdict
@@ -331,6 +332,8 @@ def audit_context(values: dict) -> str:
         for r in rts[:6]:
             lines.append(f"- tool {r.target_tool}: obeyed={r.mock_agent_obeyed}, canary hits={r.canary_hits[:4]}, "
                          f"notes: {_clip(r.notes, 160)}")
+    elif _sandbox_skipped(values):
+        lines.append("Sandbox (red team) tests: skipped because the LLM was unavailable")
     else:
         lines.append("Sandbox (red team) tests: not run for this package")
     lines.append(f"Patch changes: {values.get('patch_changes', [])}")
@@ -438,8 +441,16 @@ def _level_evidence(values: dict, technical: bool) -> str:
     return "\n".join(lines)
 
 
+def _sandbox_skipped(values: dict) -> bool:
+    """The red team was due but its LLM failed, so it skipped the sandbox (see red_team.py)."""
+    return any(SANDBOX_SKIPPED in msg_text(m) for m in values.get("redteam_messages", []))
+
+
 def _level_sandbox(values: dict, technical: bool) -> str:
     rts = values.get("red_team_results", [])
+    if not rts and _sandbox_skipped(values):
+        return ("The sandbox test was due for this package but was skipped: the LLM was unavailable, and the "
+                "sandbox's mock agent uses the same model. The verdict rests on the policy minimum and the findings.")
     if not rts:
         return ("No sandbox test was run for this package: the red team only runs when there are signs of injected "
                 "instructions, a rug pull, or a high-severity finding on a specific tool.")

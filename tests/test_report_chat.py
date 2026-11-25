@@ -442,3 +442,15 @@ def test_long_id_lists_say_how_many_were_left_out():
     assert f"(+{hidden} more)" in report_chat.audit_context(values)          # what the model sees
     chat.turn("t", "I'm technical")
     assert f"(+{hidden} more)" in chat.turn("t", "which CVEs?").reply       # rule-based answer
+
+
+def test_sandbox_skipped_for_a_failed_llm_is_not_explained_as_not_needed():
+    """Week 2 review: when the red team's LLM fails it skips the sandbox. The chat must
+    say that, not that the package did not need a red team."""
+    from mcp_security_auditor.agents.red_team import SANDBOX_SKIPPED
+
+    values = {"red_team_results": [], "redteam_messages": [AIMessage(content=f"[LLM unavailable ...] {SANDBOX_SKIPPED}")]}
+    text = report_chat._level_sandbox(values, technical=False)
+    assert "skipped" in text and "LLM was unavailable" in text
+    assert "only runs when" not in text
+    assert "only runs when" in report_chat._level_sandbox({"red_team_results": []}, technical=False)

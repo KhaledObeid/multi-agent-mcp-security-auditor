@@ -25,8 +25,18 @@ def agent_turn(
     rounds_used: int,
     offline_calls: Callable[[], list[dict]],
     offline_final: str,
+    fallback_calls: Callable[[], list[dict]] | None = None,
+    fallback_final: str | None = None,
 ) -> list[BaseMessage]:
-    """Return the NEW messages to append to this agent's channel."""
+    """Return the NEW messages to append to this agent's channel.
+
+    fallback_calls / fallback_final replace offline_calls / offline_final when the
+    LLM fails online (default: the same scripted step). An agent whose tools need
+    the LLM themselves (the red team's sandbox) passes no calls here, so a model
+    that is down is not called again through the tools.
+    """
+    fb_calls = offline_calls if fallback_calls is None else fallback_calls
+    fb_final = offline_final if fallback_final is None else fallback_final
     new: list[BaseMessage] = []
     if not channel:
         new = [SystemMessage(system_prompt), HumanMessage(brief())]
@@ -43,7 +53,7 @@ def agent_turn(
 
     # this agent's LLM already failed earlier in this audit: don't wait on it again
     if any(isinstance(m, AIMessage) and str(m.content).startswith(FALLBACK_TAG) for m in convo):
-        new.append(_scripted_step(convo, offline_calls, offline_final,
+        new.append(_scripted_step(convo, fb_calls, fb_final,
                                   note=f"{FALLBACK_TAG} earlier in this audit; using rule-based fallback]"))
         return new
 
@@ -57,7 +67,7 @@ def agent_turn(
         # whole audit, play the scripted rule-based step for this turn, and say
         # so in the message so the fallback is visible in the trace.
         note = f"{FALLBACK_TAG} ({type(e).__name__}: {str(e)[:160]}); using rule-based fallback]"
-        ai = _scripted_step(convo, offline_calls, offline_final, note=note)
+        ai = _scripted_step(convo, fb_calls, fb_final, note=note)
     new.append(ai)
     return new
 

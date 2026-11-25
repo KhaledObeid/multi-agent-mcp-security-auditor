@@ -103,7 +103,7 @@ On Windows PowerShell set the flag with `$env:MCP_SECURITY_AUDITOR_OFFLINE=1` be
 | Structured Output Mode | `AuditFindings` (analyst) and `FinalReport` (report), with validation and fallback |
 | Message types and tool calls | `utils/messages.print_message`, printed live during every run |
 | Safeguards | untrusted-content delimiting, invisible-character reveal, tool-round limits, policy floor on verdicts (computed from the findings AND the deterministic scanner, so the LLM cannot lower it by under-rating a finding; shown as `policy minimum`), sandbox never executes tools |
-| Checkpointing / rug pull | `intake.py` compares each audit with the last approved one on the same thread: changed or new tools, new permissions and new dependencies all count as a rug pull |
+| Checkpointing / rug pull | `intake.py` compares each audit with the last approved one on the same thread: changed or new tools and new permissions count as a rug pull (block); a new dependency raises the minimum to `install_with_mitigations` instead |
 | Report chat (user-facing) | `agents/report_chat.py`: answers questions about the audit on the current thread, one level deeper per follow-up, plain or technical style (`user_expertise`, kept on the thread with `chat_messages`); its only tool, `start_audit`, runs the full graph. Guardrails in code: input checks before any LLM call (empty, length, key-like strings), `ChatReply` structured output with fixed refusals, output check against invented ids, verdict lock, and a path allow-list |
 | Error handling | a failed LLM call falls back to the rule-based step for that agent (`utils/agent_loop.py`), so an audit always finishes; failures are shown in the trace and in `errors` |
 

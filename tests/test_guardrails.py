@@ -2,7 +2,8 @@
 
 Each test reproduces an experiment that showed a real gap (offline, no API key):
   1. the LLM could lower the policy floor by under-rating a finding,
-  2. a rug pull that only adds permissions / dependencies went unnoticed,
+  2. a rug pull that only adds permissions went unnoticed (a new dependency
+     raises the floor to install_with_mitigations instead, after the week 2 review),
   3. the red team ran on packages it cannot test (dependency-only findings).
 """
 import dataclasses
@@ -84,7 +85,7 @@ def test_report_records_the_policy_floor():
     assert out["policy_reason"]
 
 
-# --- 2. rug pull through permissions / dependencies ----------------------------
+# --- 2. rug pull through permissions; new dependencies --------------------------
 def _audit_twice(v1, v2, thread):
     g = build_graph()
     g.invoke({"package": v1}, {"configurable": {"thread_id": thread}})
@@ -100,13 +101,37 @@ def test_rug_pull_by_new_permission_is_detected():
     assert out["final_report"].verdict == Verdict.BLOCK
 
 
-def test_rug_pull_by_new_dependency_is_detected():
+def test_new_dependency_needs_mitigations_but_is_not_a_rug_pull():
+    """Week 2 review: ordinary updates add dependencies, so blocking them as a rug pull
+    raised the false-block rate. A new dependency now raises the floor to
+    install_with_mitigations (and OSV still checks it) instead of blocking."""
     v1 = load("rugpull_calc_v1")
     v2 = v1.model_copy(update={"version": "1.0.1",
                                "dependencies": v1.dependencies + [Dependency(name="evil-helper", version="0.0.1")]})
     out = _audit_twice(v1, v2, "dep")
+    assert out["audit_history"][0].verdict != Verdict.BLOCK  # v1 was approved, so v2 is compared with it
+    assert out["rug_pull_detected"] is False
+    assert out["policy_floor"] == Verdict.INSTALL_WITH_MITIGATIONS
+    assert "evil-helper==0.0.1" in out["policy_reason"]
+    assert any("evil-helper" in m for m in out["final_report"].required_mitigations)
+
+
+def test_new_dependency_with_a_new_permission_still_blocks():
+    v1 = load("rugpull_calc_v1")
+    v2 = v1.model_copy(update={"version": "1.0.1", "permissions": v1.permissions + ["shell:exec"],
+                               "dependencies": v1.dependencies + [Dependency(name="evil-helper", version="0.0.1")]})
+    out = _audit_twice(v1, v2, "dep-and-perm")
     assert out["rug_pull_detected"] is True
-    assert any("evil-helper" in c for c in out["rug_pull_changes"])
+    assert out["final_report"].verdict == Verdict.BLOCK
+
+
+def test_dependency_already_approved_is_not_new():
+    v1 = load("rugpull_calc_v1")
+    v1 = v1.model_copy(update={"dependencies": [Dependency(name="requests", version="2.31.0")]})
+    v2 = v1.model_copy(update={"version": "1.0.1", "dependencies": [Dependency(name="requests", version="2.32.3")]})
+    out = _audit_twice(v1, v2, "dep-bump")
+    assert out["rug_pull_detected"] is False
+    assert "new dependencies" not in out["policy_reason"]
 
 
 def test_unchanged_reaudit_is_not_a_rug_pull():

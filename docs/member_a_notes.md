@@ -88,7 +88,7 @@ has a test that fails on the old code and passes on the new one (`tests/test_gua
 | # | Gap (reproduced) | Fix |
 |---|---|---|
 | 1 | **The LLM could weaken the verdict.** The policy floor was computed from the LLM's findings only. With the analyst LLM rating the SSH-stealing instruction `high` (as Gemini did in the first online run) and a sandbox run where the mock agent did not obey, `poisoned_math` got a floor of `install_with_mitigations`. The analyst safety net did not help: it only re-adds a critical finding the LLM *omitted*, not one it *under-rated* | `policy_verdict` takes the highest of the findings' severity and the deterministic scanner's severity hints. Floor and reason are stored in the new state fields `policy_floor` / `policy_reason` and printed as `policy minimum` (kept out of `FinalReport`, the LLM's SOM target, so the LLM never fills in its own floor) |
-| 2 | **Rug pulls through permissions or dependencies were missed.** v2 of the calculator with identical descriptions but new `shell:exec`, `fs:*` and an unknown dependency gave `rug_pull_detected: False` | `AuditRecord` gains optional `permissions` and `dependencies`; intake flags any *added* permission or dependency (removals and version bumps of existing dependencies are normal updates) |
+| 2 | **Rug pulls through permissions or dependencies were missed.** v2 of the calculator with identical descriptions but new `shell:exec`, `fs:*` and an unknown dependency gave `rug_pull_detected: False` | `AuditRecord` gains optional `permissions` and `dependencies`; intake flags any *added* permission or dependency (removals and version bumps of existing dependencies are normal updates). Dependencies changed after the PR review, see §10 |
 | 3 | **The red team ran on packages it cannot test.** `vuln_deps_pdf` (only CVE findings, no affected tool) went to the red team, which then "attacked" an innocent tool: wasted LLM calls | `should_red_team` counts only high findings that name a tool (plus injection signs and rug pulls, as before). Offline evaluation unchanged at 7/7; the red team now skips 2 of 7 samples |
 
 Passed to teammates: B (permission-diff bug confirmed in the online run; hidden-parameter stuffing not counted as
@@ -196,3 +196,21 @@ Observations:
 1. Get `a/week1-integration` and then `a/week2-report` reviewed and merged.
 2. One more online check after B's and C's week 2 prompts merge.
 3. Agree with B what counts as `mock_agent_obeyed`; it feeds the policy floor.
+
+## 10. PR review fixes for `a/week2-report` (25 November 2026)
+
+| # | Review point | Fix |
+|---|---|---|
+| 1 | **Fallback plus sandbox could hang an audit for about 30 minutes.** When the Red-Team LLM failed, the rule-based fallback still requested 3 sandbox tests, and each test calls the same model 5 times. With the 30 s timeout and 3 retries, each failed call can take about 2 minutes. | `agent_turn` takes optional `fallback_calls` / `fallback_final` (default: the offline script). The red team passes no calls, so when its LLM fails it skips the sandbox and routes straight to the report. The report adds a line to `errors` and a sentence to the rationale saying the sandbox was skipped. Offline mode still runs the scripted tests. Member B's side, stopping a test after its first failed trial, is still open. |
+| 2 | **A new dependency counted as a rug pull, so it blocked.** Ordinary updates add dependencies, which raised the false-block rate. | Intake flags only changed or new tools and new permissions. `intake.new_dependencies` compares the package with the last approved audit. The policy floor raises the minimum to `install_with_mitigations`, and the mitigations ask for a review of each new dependency. OSV still checks every dependency, including known-malicious releases. No contract change. None of the four `rugpull_*` samples adds a dependency, so the eval labels are unchanged. |
+| 3 | **Contract fields added after the freeze without a `contract:` title or a heads-up.** | No code change. Heads-up to B and C listing the four additive fields (`AuditRecord.permissions`, `AuditRecord.dependencies`, `AuditState.policy_floor`, `AuditState.policy_reason`). |
+
+Tests: `tests/test_agent_loop_fallback.py` (fallback calls, offline unchanged, the red team skips the sandbox) and
+`tests/test_guardrails.py` (a new dependency needs mitigations, a new dependency plus a new permission still blocks,
+a version bump is not new).
+
+Merged into `a/week2-report-chat`: the Report chat now says the sandbox was skipped because the LLM was
+unavailable, instead of "the red team only runs when ..." (`tests/test_report_chat.py`).
+
+For Member C (optional): the analyst brief could list `intake.new_dependencies(state)`, so the LLM sees which
+dependencies are new.
