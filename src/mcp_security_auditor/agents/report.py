@@ -21,6 +21,8 @@ import json
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from mcp_security_auditor.agents.intake import new_dependencies
+from mcp_security_auditor.agents.red_team import SANDBOX_SKIPPED
 from mcp_security_auditor.config import settings
 from mcp_security_auditor.schemas import AuditRecord, FinalReport, Severity, Verdict
 from mcp_security_auditor.state import AuditState
@@ -118,6 +120,13 @@ def policy_triggers(state: AuditState) -> list[tuple[Verdict, str]]:
     if unchecked:
         triggers.append((Verdict.INSTALL_WITH_MITIGATIONS, f"{UNCHECKED_DEPS_REASON}: {', '.join(unchecked)}"))
 
+    # Not a rug pull (ordinary updates add dependencies), but new code the user never
+    # approved: worth a review before installing, not a block.
+    added = new_dependencies(state)
+    if added:
+        triggers.append((Verdict.INSTALL_WITH_MITIGATIONS,
+                         f"new dependencies since the last approved version: {', '.join(added)}"))
+
     unjustified = state.permission_diff.unjustified_permissions if state.permission_diff else []
     if unjustified:
         triggers.append((Verdict.INSTALL_WITH_MITIGATIONS,
@@ -162,6 +171,10 @@ def policy_mitigations(state: AuditState) -> list[str]:
     if unchecked:
         lines.append("Check these dependencies for known CVEs manually (e.g. on osv.dev) before installing, "
                      f"because the automatic lookup failed: {', '.join(unchecked)}.")
+    added = new_dependencies(state)
+    if added:
+        lines.append("Review the dependencies added since the last approved version (maintainer, purpose, "
+                     f"install scripts) and pin their versions before installing: {', '.join(added)}.")
     return lines
 
 
@@ -193,10 +206,17 @@ def policy_rationale(state: AuditState, floor: Verdict, reason: str, patch_chang
                          f"In {len(tested)} sandbox test(s), the mock agent did not obey injected instructions.")
     elif state.red_team_results:
         sentences.append("The sandbox test could not run (offline mode or an error), so it did not affect the verdict.")
+    elif sandbox_skipped(state):
+        sentences.append("The sandbox test was skipped because the LLM was unavailable, so it did not affect the verdict.")
 
     if patch_changes:
         sentences.append(f"A patched manifest with {len(patch_changes)} change(s) was produced.")
     return " ".join(sentences)
+
+
+def sandbox_skipped(state: AuditState) -> bool:
+    """True when the red team fell back without running the sandbox (its LLM was down)."""
+    return any(SANDBOX_SKIPPED in str(m.content) for m in state.redteam_messages)
 
 
 def _context(state: AuditState, floor: Verdict, reason: str, patch_changes: list[str]) -> str:
@@ -207,11 +227,13 @@ def _context(state: AuditState, floor: Verdict, reason: str, patch_changes: list
     package_data = (f"Package: {state.package.name} v{state.package.version}\n"
                     f"Policy reasons: {reason}\n"
                     f"Findings: {json.dumps(findings)[:6000]}\n"
-                    f"Red-team results: {json.dumps(rt)[:3000]}\n"
+                    f"Red-team results: {json.dumps(rt)[:3000]}"
+                    f"{' (sandbox skipped: LLM unavailable)' if sandbox_skipped(state) else ''}\n"
                     f"Permissions not justified by the stated purpose: {unjustified}\n"
                     f"Dependencies with known vulnerabilities: {json.dumps(vulns)[:1500]}\n"
                     f"Dependencies that could not be checked for known CVEs: {unchecked_dependencies(state)}\n"
                     f"Rug pull detected: {state.rug_pull_detected} {state.rug_pull_changes}\n"
+                    f"New dependencies since the last approved version: {new_dependencies(state)}\n"
                     f"Patched manifest changes: {patch_changes}")
     return f"Minimum verdict allowed by policy: {floor.value}\n\n{_untrusted(package_data)}"
 
@@ -219,6 +241,8 @@ def _context(state: AuditState, floor: Verdict, reason: str, patch_changes: list
 def report_node(state: AuditState) -> dict:
     floor, reason = policy_verdict(state)
     errors = list(state.errors)
+    if sandbox_skipped(state):
+        errors.append("red team: LLM unavailable, sandbox skipped (it would call the same model)")
     unchecked = unchecked_dependencies(state)
     if unchecked:
         errors.append(f"OSV lookup failed or missing for {', '.join(unchecked)}; minimum raised to "
